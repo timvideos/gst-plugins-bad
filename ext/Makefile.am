@@ -366,6 +366,12 @@ else
 RTMP_DIR =
 endif
 
+#if ENABLE_SPEAKERTRACK
+SPEAKERTRACK_DIR = speakertrack
+#else
+#SPEAKERTRACK_DIR =
+#endif
+
 
 SUBDIRS=\
 	$(VOAACENC_DIR) \
@@ -422,6 +428,7 @@ SUBDIRS=\
 	$(SPANDSP_DIR) \
 	$(GME_DIR) \
 	$(SPC_DIR) \
+	$(SPEAKERTRACK_DIR) \
 	$(SWFDEC_DIR) \
 	$(TELETEXTDEC_DIR) \
 	$(TIMIDITY_DIR) \
@@ -477,6 +484,7 @@ DIST_SUBDIRS = \
 	soundtouch \
 	spandsp \
 	spc \
+	speakertrack \
 	gme \
 	swfdec \
 	teletextdec \
