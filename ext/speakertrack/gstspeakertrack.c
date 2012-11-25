@@ -479,6 +479,29 @@ gst_speaker_track_run_detector (GstSpeakerTrack * filter,
       );
 }
 
+static void
+gst_speaker_track_draw_rect_spots (IplImage * img, CvRect * r, CvScalar color,
+    int thikness CV_DEFAULT (2))
+{
+  int radius = 1, linetype = 8;
+  CvPoint center;
+  center.x = cvRound ((r->x + r->width / 2));
+  center.y = r->y;
+  cvCircle (img, center, radius, color, thikness, linetype, 0);
+
+  center.x = r->x;
+  center.y = cvRound ((r->y + r->height / 2));;
+  cvCircle (img, center, radius, color, thikness, linetype, 0);
+
+  center.x = cvRound ((r->x + r->width / 2));
+  center.y = cvRound ((r->y + r->height));;
+  cvCircle (img, center, radius, color, thikness, linetype, 0);
+
+  center.x = cvRound ((r->x + r->width));
+  center.y = cvRound ((r->y + r->height / 2));;
+  cvCircle (img, center, radius, color, thikness, linetype, 0);
+}
+
 /* 
  * Performs the face detection
  */
@@ -495,7 +518,7 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     GValue facedata = { 0 };
     CvSeq *faces;
     CvSeq *mouth = NULL, *nose = NULL, *eyes = NULL;
-    gint i;
+    gint i, numFaces;
     gboolean do_display = FALSE;
 
     if (filter->display) {
@@ -515,7 +538,8 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     msg = gst_speaker_track_message_new (filter, buf);
     g_value_init (&facelist, GST_TYPE_LIST);
 
-    for (i = 0; i < (faces ? faces->total : 0); i++) {
+    numFaces = (faces ? faces->total : 0);
+    for (i = 0; i < numFaces; i++) {
       CvRect *r = (CvRect *) cvGetSeqElem (faces, i);
       guint mw = filter->min_size_width / 8;
       guint mh = filter->min_size_height / 8;
@@ -620,56 +644,56 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
 
       if (do_display) {
         CvPoint center;
-        CvSize axes;
-        gdouble w, h;
         gint cb = 255 - ((i & 3) << 7);
         gint cg = 255 - ((i & 12) << 5);
         gint cr = 255 - ((i & 48) << 3);
 
-        w = r->width / 2;
-        h = r->height / 2;
-        center.x = cvRound ((r->x + w));
-        center.y = cvRound ((r->y + h));
-        axes.width = w;
-        axes.height = h * 1.25; /* tweak for face form */
-        cvEllipse (img, center, axes, 0.0, 0.0, 360.0, CV_RGB (cr, cg, cb),
-            3, 8, 0);
+        gst_speaker_track_draw_rect_spots (img, r, CV_RGB (cr, cg, cb), 2);
 
         if (have_nose) {
           CvRect *sr = (CvRect *) cvGetSeqElem (nose, 0);
-
-          w = sr->width / 2;
-          h = sr->height / 2;
-          center.x = cvRound ((rnx + sr->x + w));
-          center.y = cvRound ((rny + sr->y + h));
-          axes.width = w;
-          axes.height = h * 1.25;       /* tweak for nose form */
-          cvEllipse (img, center, axes, 0.0, 0.0, 360.0, CV_RGB (cr, cg, cb),
-              1, 8, 0);
+          CvRect rr = cvRect (sr->x + rnx, sr->y + rny, sr->width, sr->height);
+          center.x = cvRound ((rr.x + rr.width / 2));
+          center.y = cvRound ((rr.y + rr.height / 2));
+          cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
         }
         if (have_mouth) {
           CvRect *sr = (CvRect *) cvGetSeqElem (mouth, 0);
-
-          w = sr->width / 2;
-          h = sr->height / 2;
-          center.x = cvRound ((rmx + sr->x + w));
-          center.y = cvRound ((rmy + sr->y + h));
-          axes.width = w * 1.5; /* tweak for mouth form */
-          axes.height = h;
-          cvEllipse (img, center, axes, 0.0, 0.0, 360.0, CV_RGB (cr, cg, cb),
-              1, 8, 0);
+          CvRect rr = cvRect (sr->x + rmx, sr->y + rmy, sr->width, sr->height);
+          gst_speaker_track_draw_rect_spots (img, &rr, CV_RGB (cr, cg, cb), 1);
         }
         if (have_eyes) {
           CvRect *sr = (CvRect *) cvGetSeqElem (eyes, 0);
+          CvRect rr = cvRect (sr->x + rex, sr->y + rey, sr->width, sr->height);
 
+          center.x = rr.x;
+          center.y = rr.y;
+          cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
+
+          center.x = cvRound ((rr.x + rr.width));
+          center.y = rr.y;
+          cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
+
+          center.x = cvRound ((rr.x + rr.width));
+          center.y = cvRound ((rr.y + rr.height));
+          cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
+
+          center.x = rr.x;
+          center.y = cvRound ((rr.y + rr.height));
+          cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
+
+#if 0
+          CvSize axes;
+          gdouble w, h;
           w = sr->width / 2;
           h = sr->height / 2;
           center.x = cvRound ((rex + sr->x + w));
           center.y = cvRound ((rey + sr->y + h));
-          axes.width = w * 1.5; /* tweak for eyes form */
+          axes.width = w * 1;   /* tweak for eyes form */
           axes.height = h;
           cvEllipse (img, center, axes, 0.0, 0.0, 360.0, CV_RGB (cr, cg, cb),
               1, 8, 0);
+#endif
         }
       }
     }
