@@ -39,26 +39,35 @@ bus_observer (GstBus * bus, GstMessage * msg, gpointer data)
 static void
 on_pad_added (GstElement * element, GstPad * pad, gpointer data)
 {
-  GstElement *next = (GstElement *) data;
-  GstPad *sinkpad = gst_element_get_static_pad (next, "sink");
+  GstElement **sinks = (GstElement **) data;
+  GstPad *sinkpad = NULL;
   gchar *padname = gst_pad_get_name (pad);
 
-  g_print ("dynamic pad: %s\n", padname);
+  g_print ("demuxer pad: %s\n", padname);
 
-  if (g_strcmp0 (padname, "video") == 0) {
-    gst_pad_link (pad, sinkpad);
+  if (g_strcmp0 (padname, "audio") == 0) {
+    sinkpad = gst_element_get_static_pad (sinks[0], "sink");
+  } else if (g_strcmp0 (padname, "video") == 0) {
+    sinkpad = gst_element_get_static_pad (sinks[1], "sink");
   }
 
-  gst_object_unref (sinkpad);
+  if (!sinkpad) {
+    g_warning ("no sink pad\n");
+  } else {
+    gst_pad_link (pad, sinkpad);
+    gst_object_unref (sinkpad);
+  }
+
   g_free (padname);
 }
 
 static gboolean
 add_file_source (GstElement * pipe, const char *filename, const char *profile)
 {
-  GstElement *source, *dvdemuxer, *dvdecoder;
-  GstElement *videoconvert1, *videoconvert2;
-  GstElement *speakertracker, *xvimagesink;
+  GstElement *source, *dvdemuxer, *audioconverter, *dvdecoder;
+  GstElement *videoconvert1, *videoconvert2, *queue1, *queue2;
+  GstElement *speakertracker, *xvimagesink, *audiosink;
+  GstElement *demuxSinks[2];
 
   /* Create elements */
 
@@ -98,9 +107,28 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
     return FALSE;
   }
 
-  xvimagesink = gst_element_factory_make ("xvimagesink", "sink");
+  xvimagesink = gst_element_factory_make ("xvimagesink", "video_sink");
   if (!xvimagesink) {
     g_warning ("'xvimagesink' plugin missing\n");
+    return FALSE;
+  }
+
+  audioconverter = gst_element_factory_make ("audioconvert", "audio_converter");
+  if (!audioconverter) {
+    g_warning ("'audioconvert' plugin missing\n");
+    return FALSE;
+  }
+
+  audiosink = gst_element_factory_make ("alsasink", "audio_sink");
+  if (!audiosink) {
+    g_warning ("'audioconvert' plugin missing\n");
+    return FALSE;
+  }
+
+  queue1 = gst_element_factory_make ("queue", "queue1");
+  queue2 = gst_element_factory_make ("queue", "queue2");
+  if (!queue1 || !queue2) {
+    g_warning ("'queue' plugin missing\n");
     return FALSE;
   }
 
@@ -113,20 +141,27 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
   g_object_set (G_OBJECT (speakertracker), "min-size-height", 60, NULL);
 
   gst_bin_add_many (GST_BIN (pipe), source, dvdemuxer, dvdecoder,
-      videoconvert1, speakertracker, videoconvert2, xvimagesink, NULL);
+      videoconvert1, speakertracker, videoconvert2, xvimagesink,
+      audioconverter, audiosink, queue1, queue2, NULL);
 
   /* link elements */
   if (!gst_element_link (source, dvdemuxer)) {
     g_warning ("failed to link element (%d)\n", __LINE__);
   }
 
-  if (!gst_element_link_many (dvdecoder, videoconvert1, speakertracker,
+  if (!gst_element_link_many (queue1, audioconverter, audiosink, NULL)) {
+    g_warning ("failed to link element (%d)\n", __LINE__);
+  }
+
+  if (!gst_element_link_many (queue2, dvdecoder, videoconvert1, speakertracker,
           videoconvert2, xvimagesink, NULL)) {
     g_warning ("failed to link element (%d)\n", __LINE__);
   }
 
+  demuxSinks[0] = queue1;
+  demuxSinks[1] = queue2;
   g_signal_connect (dvdemuxer, "pad-added", G_CALLBACK (on_pad_added),
-      dvdecoder);
+      &demuxSinks[0]);
 
   return TRUE;
 }
