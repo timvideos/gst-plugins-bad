@@ -101,7 +101,5 @@ struct _GstSpeakerTrackClass
 
 GType gst_speaker_track_get_type (void);
 
-gboolean gst_speaker_track_plugin_init (GstPlugin * plugin);
-
 G_END_DECLS
 #endif /* __GST_SPEAKER_TRACK_H__ */
