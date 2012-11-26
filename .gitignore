@@ -51,6 +51,7 @@ gst*orc.h
 /tests/examples/jack/jack_client
 /tests/examples/opencv/gstmotioncells_dynamic_test
 /tests/examples/opencv/gstfacerec_test
+/tests/examples/speakertrack/speakertrack_test
 
 Build
 *.user

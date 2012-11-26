@@ -366,12 +366,7 @@ else
 RTMP_DIR =
 endif
 
-#if ENABLE_SPEAKERTRACK
 SPEAKERTRACK_DIR = speakertrack
-#else
-#SPEAKERTRACK_DIR =
-#endif
-
 
 SUBDIRS=\
 	$(VOAACENC_DIR) \

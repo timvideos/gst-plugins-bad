@@ -117,35 +117,35 @@ enum
 
 
 /*
- * GstOpencvSpeakerTrackFlags:
+ * GstSpeakerTrackFlags:
  *
  * Flags parameter to OpenCV's cvHaarDetectObjects function.
  */
 typedef enum
 {
-  GST_OPENCV_SPEAKER_TRACK_HAAR_DO_CANNY_PRUNING = (1 << 0)
-} GstOpencvSpeakerTrackFlags;
+  GST_SPEAKER_TRACK_HAAR_DO_CANNY_PRUNING = (1 << 0)
+} GstSpeakerTrackFlags;
 
-#define GST_TYPE_OPENCV_SPEAKER_TRACK_FLAGS (gst_opencv_speaker_track_flags_get_type())
+#define GST_TYPE_SPEAKER_TRACK_FLAGS (gst_speaker_track_flags_get_type())
 
 static void
-register_gst_opencv_speaker_track_flags (GType * id)
+register_gst_speaker_track_flags (GType * id)
 {
   static const GFlagsValue values[] = {
-    {(guint) GST_OPENCV_SPEAKER_TRACK_HAAR_DO_CANNY_PRUNING,
+    {(guint) GST_SPEAKER_TRACK_HAAR_DO_CANNY_PRUNING,
         "Do Canny edge detection to discard some regions", "do-canny-pruning"},
     {0, NULL, NULL}
   };
-  *id = g_flags_register_static ("GstOpencvSpeakerTrackFlags", values);
+  *id = g_flags_register_static ("GstSpeakerTrackFlags", values);
 }
 
 static GType
-gst_opencv_speaker_track_flags_get_type (void)
+gst_speaker_track_flags_get_type (void)
 {
   static GType id;
   static GOnce once = G_ONCE_INIT;
 
-  g_once (&once, (GThreadFunc) register_gst_opencv_speaker_track_flags, &id);
+  g_once (&once, (GThreadFunc) register_gst_speaker_track_flags, &id);
   return id;
 }
 
@@ -212,12 +212,10 @@ gst_speaker_track_finalize (GObject * obj)
 static void
 gst_speaker_track_class_init (GstSpeakerTrackClass * klass)
 {
-  GObjectClass *gobject_class;
-  GstOpencvVideoFilterClass *gstopencvbasefilter_class;
-
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
-  gobject_class = (GObjectClass *) klass;
-  gstopencvbasefilter_class = (GstOpencvVideoFilterClass *) klass;
+  GObjectClass *gobject_class = (GObjectClass *) klass;
+  GstOpencvVideoFilterClass *gstopencvbasefilter_class =
+      (GstOpencvVideoFilterClass *) klass;
 
   gobject_class->finalize = GST_DEBUG_FUNCPTR (gst_speaker_track_finalize);
   gobject_class->set_property = gst_speaker_track_set_property;
@@ -250,7 +248,7 @@ gst_speaker_track_class_init (GstSpeakerTrackClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_FLAGS,
       g_param_spec_flags ("flags", "Flags", "Flags to cvHaarDetectObjects",
-          GST_TYPE_OPENCV_SPEAKER_TRACK_FLAGS, DEFAULT_FLAGS,
+          GST_TYPE_SPEAKER_TRACK_FLAGS, DEFAULT_FLAGS,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_SCALE_FACTOR,
       g_param_spec_double ("scale-factor", "Scale factor",
@@ -323,7 +321,11 @@ gst_speaker_track_set_property (GObject * object, guint prop_id,
       g_free (filter->face_profile);
       if (filter->cvSpeakerTrack)
         cvReleaseHaarClassifierCascade (&filter->cvSpeakerTrack);
-      filter->face_profile = g_value_dup_string (value);
+      if (strlen (g_value_get_string (value))) {
+        filter->face_profile = g_value_dup_string (value);
+      } else {
+        filter->face_profile = g_strdup (DEFAULT_FACE_PROFILE);
+      }
       filter->cvSpeakerTrack =
           gst_speaker_track_load_profile (filter, filter->face_profile);
       break;
@@ -331,7 +333,11 @@ gst_speaker_track_set_property (GObject * object, guint prop_id,
       g_free (filter->nose_profile);
       if (filter->cvNoseDetect)
         cvReleaseHaarClassifierCascade (&filter->cvNoseDetect);
-      filter->nose_profile = g_value_dup_string (value);
+      if (strlen (g_value_get_string (value))) {
+        filter->nose_profile = g_value_dup_string (value);
+      } else {
+        filter->nose_profile = g_strdup (DEFAULT_NOSE_PROFILE);
+      }
       filter->cvNoseDetect =
           gst_speaker_track_load_profile (filter, filter->nose_profile);
       break;
@@ -339,7 +345,11 @@ gst_speaker_track_set_property (GObject * object, guint prop_id,
       g_free (filter->mouth_profile);
       if (filter->cvMouthDetect)
         cvReleaseHaarClassifierCascade (&filter->cvMouthDetect);
-      filter->mouth_profile = g_value_dup_string (value);
+      if (strlen (g_value_get_string (value))) {
+        filter->mouth_profile = g_value_dup_string (value);
+      } else {
+        filter->mouth_profile = g_strdup (DEFAULT_MOUTH_PROFILE);
+      }
       filter->cvMouthDetect =
           gst_speaker_track_load_profile (filter, filter->mouth_profile);
       break;
@@ -347,7 +357,11 @@ gst_speaker_track_set_property (GObject * object, guint prop_id,
       g_free (filter->eyes_profile);
       if (filter->cvEyesDetect)
         cvReleaseHaarClassifierCascade (&filter->cvEyesDetect);
-      filter->eyes_profile = g_value_dup_string (value);
+      if (strlen (g_value_get_string (value))) {
+        filter->eyes_profile = g_value_dup_string (value);
+      } else {
+        filter->eyes_profile = g_strdup (DEFAULT_EYES_PROFILE);
+      }
       filter->cvEyesDetect =
           gst_speaker_track_load_profile (filter, filter->eyes_profile);
       break;
@@ -740,5 +754,5 @@ plugin_init (GstPlugin * plugin)
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     skeakertrack,
-    "GStreamer Speaker Track Plugins",
+    "GStreamer Speaker Track Plugin",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

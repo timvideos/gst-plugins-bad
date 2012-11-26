@@ -16,9 +16,11 @@ else
 DIRECTFB_DIR=
 endif
 
+SPEAKERTRACK_DIR=speakertrack
+
 OPENCV_EXAMPLES=opencv
 
-SUBDIRS= $(DIRECTFB_DIR) $(GTK_EXAMPLES) $(OPENCV_EXAMPLES)
+SUBDIRS= $(DIRECTFB_DIR) $(GTK_EXAMPLES) $(OPENCV_EXAMPLES) $(SPEAKERTRACK_DIR)
 DIST_SUBDIRS= camerabin2 directfb mxf scaletempo opencv uvch264
 
 include $(top_srcdir)/common/parallel-subdirs.mak
