@@ -525,6 +525,20 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
 {
   GstSpeakerTrack *filter = GST_SPEAKER_TRACK (base);
 
+#if 0
+  {
+    static GstClockTime last = 0;
+    GstClockTime now = gst_util_get_timestamp ();
+    //g_print ("%lld\n", (long long int)(now - last));
+    if (now - last <= 118998480) {
+      last = now;
+      return GST_FLOW_OK;
+    } else {
+      last = now;
+    }
+  }
+#endif
+
   if (filter->cvSpeakerTrack) {
     GstMessage *msg = NULL;
     GstStructure *s;
