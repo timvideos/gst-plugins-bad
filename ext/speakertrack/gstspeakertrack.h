@@ -75,6 +75,13 @@ struct _GstSpeakerTrack
   GstOpencvVideoFilter element;
 
   gboolean display;
+  gboolean display_nose;
+  gboolean display_mouth;
+  gboolean display_eyes;
+
+  gboolean detect_nose;
+  gboolean detect_mouth;
+  gboolean detect_eyes;
 
   gchar *face_profile;
   gchar *nose_profile;
@@ -92,6 +99,9 @@ struct _GstSpeakerTrack
   CvHaarClassifierCascade *cvMouthDetect;
   CvHaarClassifierCascade *cvEyesDetect;
   CvMemStorage *cvStorage;
+
+  gboolean locked;
+  GstStructure *active_face;
 };
 
 struct _GstSpeakerTrackClass
