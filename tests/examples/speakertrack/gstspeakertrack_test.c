@@ -28,8 +28,21 @@ bus_observer (GstBus * bus, GstMessage * msg, gpointer data)
       break;
     }
 
+    case GST_MESSAGE_ELEMENT:{
+      const GstStructure *st =
+          (const GstStructure *) gst_message_get_structure (msg);
+      const GValue *faces =
+          (const GValue *) gst_structure_get_value (st, "faces");
+
+      //g_print ("message: %s, %s\n", GST_MESSAGE_SRC_NAME (msg), GST_MESSAGE_TYPE_NAME (msg));
+      g_print ("%s: faces=%d\n", GST_MESSAGE_SRC_NAME (msg),
+          gst_value_list_get_size (faces));
+
+      break;
+    }
+
     default:
-      //g_print ("message: %d\n", GST_MESSAGE_TYPE (msg));
+      //g_print ("message: %d\n", GST_MESSAGE_SRC_NAME (msg), GST_MESSAGE_TYPE_NAME (msg));
       break;
   }
 
@@ -77,13 +90,13 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
     return FALSE;
   }
 
-  dvdemuxer = gst_element_factory_make ("dvdemux", "dv_demuxer");
+  dvdemuxer = gst_element_factory_make ("dvdemux", "dv-demuxer");
   if (!dvdemuxer) {
     g_warning ("'dvdemuxer' plugin missing\n");
     return FALSE;
   }
 
-  dvdecoder = gst_element_factory_make ("dvdec", "dv_decoder");
+  dvdecoder = gst_element_factory_make ("dvdec", "dv-decoder");
   if (!dvdecoder) {
     g_warning ("'dvdec' plugin missing\n");
     return FALSE;
@@ -101,25 +114,25 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
     return FALSE;
   }
 
-  speakertracker = gst_element_factory_make ("speakertrack", "speaker_tracker");
+  speakertracker = gst_element_factory_make ("speakertrack", "speaker-tracker");
   if (!speakertracker) {
     g_warning ("'speakertrack' plugin missing\n");
     return FALSE;
   }
 
-  xvimagesink = gst_element_factory_make ("xvimagesink", "video_sink");
+  xvimagesink = gst_element_factory_make ("xvimagesink", "video-sink");
   if (!xvimagesink) {
     g_warning ("'xvimagesink' plugin missing\n");
     return FALSE;
   }
 
-  audioconverter = gst_element_factory_make ("audioconvert", "audio_converter");
+  audioconverter = gst_element_factory_make ("audioconvert", "audio-converter");
   if (!audioconverter) {
     g_warning ("'audioconvert' plugin missing\n");
     return FALSE;
   }
 
-  audiosink = gst_element_factory_make ("alsasink", "audio_sink");
+  audiosink = gst_element_factory_make ("alsasink", "audio-sink");
   if (!audiosink) {
     g_warning ("'audioconvert' plugin missing\n");
     return FALSE;
