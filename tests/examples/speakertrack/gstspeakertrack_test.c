@@ -33,10 +33,27 @@ bus_observer (GstBus * bus, GstMessage * msg, gpointer data)
           (const GstStructure *) gst_message_get_structure (msg);
       const GValue *faces =
           (const GValue *) gst_structure_get_value (st, "faces");
+      const GValue *face_value =
+          (const GValue *) gst_structure_get_value (st, "face");
 
       //g_print ("message: %s, %s\n", GST_MESSAGE_SRC_NAME (msg), GST_MESSAGE_TYPE_NAME (msg));
-      g_print ("%s: faces=%d\n", GST_MESSAGE_SRC_NAME (msg),
-          gst_value_list_get_size (faces));
+      if (faces) {
+        g_print ("%s: faces=%d\n", GST_MESSAGE_SRC_NAME (msg),
+            gst_value_list_get_size (faces));
+      }
+
+      if (face_value && G_VALUE_HOLDS_BOXED (face_value)) {
+        GstStructure *face = (GstStructure *) g_value_get_boxed (face_value);
+        if (GST_IS_STRUCTURE (face)) {
+          guint x, y, w, h;
+          gst_structure_get_uint (face, "x", &x);
+          gst_structure_get_uint (face, "y", &y);
+          gst_structure_get_uint (face, "width", &w);
+          gst_structure_get_uint (face, "height", &h);
+          g_print ("%s: face=[(%d,%d), %d,%d]\n", GST_MESSAGE_SRC_NAME (msg),
+              x, y, w, h);
+        }
+      }
 
       break;
     }

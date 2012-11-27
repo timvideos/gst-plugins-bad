@@ -104,6 +104,12 @@ enum
 {
   PROP_0,
   PROP_DISPLAY,
+  PROP_DISPLAY_NOSE,
+  PROP_DISPLAY_MOUTH,
+  PROP_DISPLAY_EYES,
+  PROP_DETECT_NOSE,
+  PROP_DETECT_MOUTH,
+  PROP_DETECT_EYES,
   PROP_FACE_PROFILE,
   PROP_NOSE_PROFILE,
   PROP_MOUTH_PROFILE,
@@ -226,6 +232,36 @@ gst_speaker_track_class_init (GstSpeakerTrackClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_DISPLAY,
       g_param_spec_boolean ("display", "Display",
+          "Sets whether the detected faces should be highlighted in the output",
+          TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_DISPLAY_NOSE,
+      g_param_spec_boolean ("display-nose", "Display",
+          "Sets whether the detected faces should be highlighted in the output",
+          TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_DISPLAY_MOUTH,
+      g_param_spec_boolean ("display-mouth", "Display",
+          "Sets whether the detected faces should be highlighted in the output",
+          TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_DISPLAY_EYES,
+      g_param_spec_boolean ("display-eyes", "Display",
+          "Sets whether the detected faces should be highlighted in the output",
+          TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_DETECT_NOSE,
+      g_param_spec_boolean ("detect-nose", "Display",
+          "Sets whether the detected faces should be highlighted in the output",
+          TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_DETECT_MOUTH,
+      g_param_spec_boolean ("detect-mouth", "Display",
+          "Sets whether the detected faces should be highlighted in the output",
+          TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_DETECT_EYES,
+      g_param_spec_boolean ("detect-eyes", "Display",
           "Sets whether the detected faces should be highlighted in the output",
           TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
@@ -368,6 +404,24 @@ gst_speaker_track_set_property (GObject * object, guint prop_id,
     case PROP_DISPLAY:
       filter->display = g_value_get_boolean (value);
       break;
+    case PROP_DISPLAY_NOSE:
+      filter->display_nose = g_value_get_boolean (value);
+      break;
+    case PROP_DISPLAY_MOUTH:
+      filter->display_mouth = g_value_get_boolean (value);
+      break;
+    case PROP_DISPLAY_EYES:
+      filter->display_eyes = g_value_get_boolean (value);
+      break;
+    case PROP_DETECT_NOSE:
+      filter->detect_nose = g_value_get_boolean (value);
+      break;
+    case PROP_DETECT_MOUTH:
+      filter->detect_mouth = g_value_get_boolean (value);
+      break;
+    case PROP_DETECT_EYES:
+      filter->detect_eyes = g_value_get_boolean (value);
+      break;
     case PROP_SCALE_FACTOR:
       filter->scale_factor = g_value_get_double (value);
       break;
@@ -410,6 +464,24 @@ gst_speaker_track_get_property (GObject * object, guint prop_id,
       break;
     case PROP_DISPLAY:
       g_value_set_boolean (value, filter->display);
+      break;
+    case PROP_DISPLAY_NOSE:
+      g_value_set_boolean (value, filter->display_nose);
+      break;
+    case PROP_DISPLAY_MOUTH:
+      g_value_set_boolean (value, filter->display_mouth);
+      break;
+    case PROP_DISPLAY_EYES:
+      g_value_set_boolean (value, filter->display_eyes);
+      break;
+    case PROP_DETECT_NOSE:
+      g_value_set_boolean (value, filter->detect_nose);
+      break;
+    case PROP_DETECT_MOUTH:
+      g_value_set_boolean (value, filter->detect_mouth);
+      break;
+    case PROP_DETECT_EYES:
+      g_value_set_boolean (value, filter->detect_eyes);
       break;
     case PROP_SCALE_FACTOR:
       g_value_set_double (value, filter->scale_factor);
@@ -516,6 +588,33 @@ gst_speaker_track_draw_rect_spots (IplImage * img, CvRect * r, CvScalar color,
   cvCircle (img, center, radius, color, thikness, linetype, 0);
 }
 
+static gboolean
+gst_speaker_track_lock_detect (GstSpeakerTrack * st, IplImage * img,
+    gboolean do_display)
+{
+  // TODO: detect gesture
+  return TRUE;
+}
+
+static gboolean
+gst_speaker_track_lock (GstSpeakerTrack * st, IplImage * img, GstBuffer * buf,
+    GstStructure * face, gint i)
+{
+  GstMessage *msg = gst_speaker_track_message_new (st, buf);
+  GValue face_value = { 0 };
+
+  // TODO: lock active face
+
+  g_value_init (&face_value, GST_TYPE_STRUCTURE);
+  g_value_take_boxed (&face_value, face);
+  gst_structure_set_value ((GstStructure *) gst_message_get_structure (msg),
+      "face", &face_value);
+  g_value_unset (&face_value);
+
+  gst_element_post_message (GST_ELEMENT (st), msg);
+  return FALSE;
+}
+
 /* 
  * Performs the face detection
  */
@@ -540,10 +639,7 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
 #endif
 
   if (filter->cvSpeakerTrack) {
-    GstMessage *msg = NULL;
     GstStructure *s;
-    GValue facelist = { 0 };
-    GValue facedata = { 0 };
     CvSeq *faces;
     CvSeq *mouth = NULL, *nose = NULL, *eyes = NULL;
     gint i, numFaces;
@@ -560,11 +656,13 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     cvCvtColor (img, filter->cvGray, CV_RGB2GRAY);
     cvClearMemStorage (filter->cvStorage);
 
+    if (!filter->locked
+        && !gst_speaker_track_lock_detect (filter, img, do_display)) {
+      return GST_FLOW_OK;
+    }
+
     faces = gst_speaker_track_run_detector (filter, filter->cvSpeakerTrack,
         filter->min_size_width, filter->min_size_height);
-
-    msg = gst_speaker_track_message_new (filter, buf);
-    g_value_init (&facelist, GST_TYPE_LIST);
 
     numFaces = (faces ? faces->total : 0);
     for (i = 0; i < numFaces; i++) {
@@ -574,11 +672,11 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
       guint rnx = 0, rny = 0, rnw, rnh;
       guint rmx = 0, rmy = 0, rmw, rmh;
       guint rex = 0, rey = 0, rew, reh;
-      gboolean have_nose, have_mouth, have_eyes;
+      gboolean have_nose, have_mouth, have_eyes, locked = FALSE;
 
       /* detect face features */
 
-      if (filter->cvNoseDetect) {
+      if (filter->cvNoseDetect && filter->detect_nose) {
         rnx = r->x + r->width / 4;
         rny = r->y + r->height / 4;
         rnw = r->width / 2;
@@ -593,7 +691,7 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
         have_nose = FALSE;
       }
 
-      if (filter->cvMouthDetect) {
+      if (filter->cvMouthDetect && filter->detect_mouth) {
         rmx = r->x;
         rmy = r->y + r->height / 2;
         rmw = r->width;
@@ -608,7 +706,7 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
         have_mouth = FALSE;
       }
 
-      if (filter->cvEyesDetect) {
+      if (filter->cvEyesDetect && filter->detect_eyes) {
         rex = r->x;
         rey = r->y;
         rew = r->width;
@@ -638,36 +736,33 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
         GST_LOG_OBJECT (filter, "nose/%d: x,y = %4u,%4u: w.h = %4u,%4u",
             nose->total, rnx + sr->x, rny + sr->y, sr->width, sr->height);
         gst_structure_set (s,
-            "nose->x", G_TYPE_UINT, rnx + sr->x,
-            "nose->y", G_TYPE_UINT, rny + sr->y,
-            "nose->width", G_TYPE_UINT, sr->width,
-            "nose->height", G_TYPE_UINT, sr->height, NULL);
+            "nose.x", G_TYPE_UINT, rnx + sr->x,
+            "nose.y", G_TYPE_UINT, rny + sr->y,
+            "nose.width", G_TYPE_UINT, sr->width,
+            "nose.height", G_TYPE_UINT, sr->height, NULL);
       }
       if (have_mouth) {
         CvRect *sr = (CvRect *) cvGetSeqElem (mouth, 0);
         GST_LOG_OBJECT (filter, "mouth/%d: x,y = %4u,%4u: w.h = %4u,%4u",
             mouth->total, rmx + sr->x, rmy + sr->y, sr->width, sr->height);
         gst_structure_set (s,
-            "mouth->x", G_TYPE_UINT, rmx + sr->x,
-            "mouth->y", G_TYPE_UINT, rmy + sr->y,
-            "mouth->width", G_TYPE_UINT, sr->width,
-            "mouth->height", G_TYPE_UINT, sr->height, NULL);
+            "mouth.x", G_TYPE_UINT, rmx + sr->x,
+            "mouth.y", G_TYPE_UINT, rmy + sr->y,
+            "mouth.width", G_TYPE_UINT, sr->width,
+            "mouth.height", G_TYPE_UINT, sr->height, NULL);
       }
       if (have_eyes) {
         CvRect *sr = (CvRect *) cvGetSeqElem (eyes, 0);
         GST_LOG_OBJECT (filter, "eyes/%d: x,y = %4u,%4u: w.h = %4u,%4u",
             eyes->total, rex + sr->x, rey + sr->y, sr->width, sr->height);
         gst_structure_set (s,
-            "eyes->x", G_TYPE_UINT, rex + sr->x,
-            "eyes->y", G_TYPE_UINT, rey + sr->y,
-            "eyes->width", G_TYPE_UINT, sr->width,
-            "eyes->height", G_TYPE_UINT, sr->height, NULL);
+            "eyes.x", G_TYPE_UINT, rex + sr->x,
+            "eyes.y", G_TYPE_UINT, rey + sr->y,
+            "eyes.width", G_TYPE_UINT, sr->width,
+            "eyes.height", G_TYPE_UINT, sr->height, NULL);
       }
-
-      g_value_init (&facedata, GST_TYPE_STRUCTURE);
-      g_value_take_boxed (&facedata, s);
-      gst_value_list_append_value (&facelist, &facedata);
-      g_value_unset (&facedata);
+      //filter->active_person
+      locked = gst_speaker_track_lock (filter, img, buf, s, i);
       s = NULL;
 
       if (do_display) {
@@ -676,21 +771,25 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
         gint cg = 255 - ((i & 12) << 5);
         gint cr = 255 - ((i & 48) << 3);
 
+        if (locked) {
+          cb = 55, cg = 55, cr = 200;
+        }
+
         gst_speaker_track_draw_rect_spots (img, r, CV_RGB (cr, cg, cb), 2);
 
-        if (have_nose) {
+        if (have_nose && filter->display_nose) {
           CvRect *sr = (CvRect *) cvGetSeqElem (nose, 0);
           CvRect rr = cvRect (sr->x + rnx, sr->y + rny, sr->width, sr->height);
           center.x = cvRound ((rr.x + rr.width / 2));
           center.y = cvRound ((rr.y + rr.height / 2));
           cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
         }
-        if (have_mouth) {
+        if (have_mouth && filter->display_mouth) {
           CvRect *sr = (CvRect *) cvGetSeqElem (mouth, 0);
           CvRect rr = cvRect (sr->x + rmx, sr->y + rmy, sr->width, sr->height);
           gst_speaker_track_draw_rect_spots (img, &rr, CV_RGB (cr, cg, cb), 1);
         }
-        if (have_eyes) {
+        if (have_eyes && filter->display_eyes) {
           CvRect *sr = (CvRect *) cvGetSeqElem (eyes, 0);
           CvRect rr = cvRect (sr->x + rex, sr->y + rey, sr->width, sr->height);
 
@@ -725,11 +824,6 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
         }
       }
     }
-
-    gst_structure_set_value ((GstStructure *) gst_message_get_structure (msg),
-        "faces", &facelist);
-    g_value_unset (&facelist);
-    gst_element_post_message (GST_ELEMENT (filter), msg);
   }
 
   return GST_FLOW_OK;
