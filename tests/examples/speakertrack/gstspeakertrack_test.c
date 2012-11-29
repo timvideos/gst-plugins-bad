@@ -139,6 +139,13 @@ on_pad_added (GstElement * element, GstPad * pad, gpointer data)
 }
 
 static gboolean
+on_video_expose (GtkWidget * widget, GdkEventExpose * event, gpointer data)
+{
+  g_print ("video expose\n");
+  return FALSE;
+}
+
+static gboolean
 add_file_source (GstElement * pipe, const char *filename, const char *profile)
 {
   GstElement *source, *dvdemuxer, *audioconverter, *dvdecoder;
@@ -284,9 +291,6 @@ main (int argc, char **argv)
     return __LINE__;
   }
 
-  bus_watch_id = gst_bus_add_watch (bus, bus_observer, NULL);
-  g_object_unref (bus);
-
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   g_signal_connect (G_OBJECT (window), "delete-event",
       G_CALLBACK (window_closed), (gpointer) bin);
@@ -294,9 +298,14 @@ main (int argc, char **argv)
   gtk_window_set_title (GTK_WINDOW (window), "Speaker Track");
 
   video_window = gtk_drawing_area_new ();
+  g_signal_connect (video_window, "expose-event", G_CALLBACK (on_video_expose),
+      NULL);
   gtk_widget_set_double_buffered (video_window, FALSE);
   gtk_container_add (GTK_CONTAINER (window), video_window);
   gtk_container_set_border_width (GTK_CONTAINER (window), 5);
+
+  bus_watch_id = gst_bus_add_watch (bus, bus_observer, video_window);
+  g_object_unref (bus);
 
   gtk_widget_show_all (window);
   gtk_widget_realize (window);

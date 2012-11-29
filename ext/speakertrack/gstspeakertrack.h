@@ -82,6 +82,7 @@ struct _GstSpeakerTrack
   gboolean detect_nose;
   gboolean detect_mouth;
   gboolean detect_eyes;
+  gboolean detect_per_frame;
 
   gchar *face_profile;
   gchar *nose_profile;
