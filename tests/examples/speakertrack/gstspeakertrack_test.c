@@ -120,13 +120,8 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
   }
 
   videoconvert1 = gst_element_factory_make ("videoconvert", "videoconvert1");
-  if (!videoconvert1) {
-    g_warning ("'videoconvert' plugin missing\n");
-    return FALSE;
-  }
-
   videoconvert2 = gst_element_factory_make ("videoconvert", "videoconvert2");
-  if (!videoconvert2) {
+  if (!videoconvert1 || !videoconvert2) {
     g_warning ("'videoconvert' plugin missing\n");
     return FALSE;
   }
@@ -151,7 +146,7 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
 
   audiosink = gst_element_factory_make ("alsasink", "audio-sink");
   if (!audiosink) {
-    g_warning ("'audioconvert' plugin missing\n");
+    g_warning ("'alsasink' plugin missing\n");
     return FALSE;
   }
 
