@@ -617,10 +617,25 @@ gst_speaker_track_lock (GstSpeakerTrack * st, IplImage * img, GstBuffer * buf,
   GstMessage *msg = gst_speaker_track_message_new (st, buf);
   GValue face_value = { 0 };
 
-  // TODO: lock active face
   if (st->active_face) {
+    CvRect r1, r2;
+    gst_structure_get_uint (st->active_face, "x", (guint *) & r1.x);
+    gst_structure_get_uint (st->active_face, "y", (guint *) & r1.y);
+    gst_structure_get_uint (st->active_face, "width", (guint *) & r1.width);
+    gst_structure_get_uint (st->active_face, "height", (guint *) & r1.height);
+    gst_structure_get_uint (face, "x", (guint *) & r2.x);
+    gst_structure_get_uint (face, "y", (guint *) & r2.y);
+    gst_structure_get_uint (face, "width", (guint *) & r2.width);
+    gst_structure_get_uint (face, "height", (guint *) & r2.height);
+
+    if ((r1.width / 2) <= abs (r2.x - r1.x)
+        || (r1.height / 2) <= abs (r2.y - r1.y)) {
+      return FALSE;
+    }
+
     gst_structure_free (st->active_face);
   }
+
   st->active_face = gst_structure_copy (face);
 
   g_value_init (&face_value, GST_TYPE_STRUCTURE);
@@ -630,12 +645,11 @@ gst_speaker_track_lock (GstSpeakerTrack * st, IplImage * img, GstBuffer * buf,
   g_value_unset (&face_value);
 
   gst_element_post_message (GST_ELEMENT (st), msg);
-  return FALSE;
+  return TRUE;
 }
 
 static void
-gst_speaker_track_mark_face (GstSpeakerTrack * filter, IplImage * img, gint i,
-    gboolean locked)
+gst_speaker_track_mark_face (GstSpeakerTrack * filter, IplImage * img, gint i)
 {
   CvPoint center;
   CvRect r, rr;
@@ -649,9 +663,7 @@ gst_speaker_track_mark_face (GstSpeakerTrack * filter, IplImage * img, gint i,
     return;
   }
 
-  if (locked) {
-    cb = 55, cg = 55, cr = 200;
-  }
+  cb = 55, cg = 55, cr = 200;
 
   gst_structure_get_uint (face, "x", (guint *) & r.x);
   gst_structure_get_uint (face, "y", (guint *) & r.y);
@@ -741,7 +753,7 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     //g_print ("%ld\n", (long int)((now - last) / 100000));
     if (((now - last) / 100000) <= 3500) {
       if (do_display) {
-        gst_speaker_track_mark_face (filter, img, 0, filter->locked);
+        gst_speaker_track_mark_face (filter, img, 0);
       }
       return GST_FLOW_OK;
     } else {
@@ -867,8 +879,8 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
       locked = gst_speaker_track_lock (filter, img, buf, s, i);
       s = NULL;
 
-      if (do_display) {
-        gst_speaker_track_mark_face (filter, img, i, locked);
+      if (do_display && locked) {
+        gst_speaker_track_mark_face (filter, img, i);
       }
     }
   }
