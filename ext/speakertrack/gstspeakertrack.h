@@ -103,6 +103,9 @@ struct _GstSpeakerTrack
 
   gboolean locked;
   GstStructure *active_face;
+  GstClockTime lock_stamp;
+  GstClockTime last_detect_stamp;
+  GList *faces;
 };
 
 struct _GstSpeakerTrackClass
