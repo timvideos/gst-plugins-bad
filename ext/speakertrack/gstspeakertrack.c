@@ -76,6 +76,7 @@
 #endif
 
 #include <gst/gst.h>
+#include <glib/gprintf.h>
 
 #include "gstopencvutils.h"
 #include "gstspeakertrack.h"
@@ -657,6 +658,30 @@ gst_speaker_track_lock (GstSpeakerTrack * st, IplImage * img, GstBuffer * buf,
 }
 
 static gboolean
+gst_speaker_track_get_face_rect (GstStructure * face, CvRect * rect,
+    const gchar * prefix)
+{
+  gchar name[16];
+
+  g_sprintf (name, "%sx", prefix);
+  if (gst_structure_has_field (face, name)) {
+    gst_structure_get_uint (face, name, (guint *) & rect->x);
+
+    g_sprintf (name, "%sy", prefix);
+    gst_structure_get_uint (face, name, (guint *) & rect->y);
+
+    g_sprintf (name, "%swidth", prefix);
+    gst_structure_get_uint (face, name, (guint *) & rect->width);
+
+    g_sprintf (name, "%sheight", prefix);
+    gst_structure_get_uint (face, name, (guint *) & rect->height);
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+static gboolean
 gst_speaker_track_mark_face (GstSpeakerTrack * filter, IplImage * img,
     GstStructure * face, gint i)
 {
@@ -673,17 +698,10 @@ gst_speaker_track_mark_face (GstSpeakerTrack * filter, IplImage * img,
     return is_active;
   }
 
-  gst_structure_get_uint (face, "x", (guint *) & r.x);
-  gst_structure_get_uint (face, "y", (guint *) & r.y);
-  gst_structure_get_uint (face, "width", (guint *) & r.width);
-  gst_structure_get_uint (face, "height", (guint *) & r.height);
+  gst_speaker_track_get_face_rect (face, &r, "");
 
   if (filter->active_face) {
-    gst_structure_get_uint (filter->active_face, "x", (guint *) & rr.x);
-    gst_structure_get_uint (filter->active_face, "y", (guint *) & rr.y);
-    gst_structure_get_uint (filter->active_face, "width", (guint *) & rr.width);
-    gst_structure_get_uint (filter->active_face, "height",
-        (guint *) & rr.height);
+    gst_speaker_track_get_face_rect (filter->active_face, &rr, "");
     if (face == filter->active_face || (r.x == rr.x && r.y == rr.y
             && r.width == rr.width && r.height == rr.height)) {
       cb = 225, cg = 25, cr = 25;
@@ -694,33 +712,20 @@ gst_speaker_track_mark_face (GstSpeakerTrack * filter, IplImage * img,
 
   gst_speaker_track_draw_rect_spots (img, &r, CV_RGB (cr, cg, cb), thikness);
 
-  have_nose = gst_structure_has_field (face, "nose.x");
+  have_nose = gst_speaker_track_get_face_rect (face, &rr, "nose.");
   if (have_nose && filter->display_nose) {
-    gst_structure_get_uint (face, "nose.x", (guint *) & rr.x);
-    gst_structure_get_uint (face, "nose.y", (guint *) & rr.y);
-    gst_structure_get_uint (face, "nose.width", (guint *) & rr.width);
-    gst_structure_get_uint (face, "nose.height", (guint *) & rr.height);
     center.x = cvRound ((rr.x + rr.width / 2));
     center.y = cvRound ((rr.y + rr.height / 2));
     cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
   }
 
-  have_mouth = gst_structure_has_field (face, "mouth.x");
+  have_mouth = gst_speaker_track_get_face_rect (face, &rr, "mouth.");
   if (have_mouth && filter->display_mouth) {
-    gst_structure_get_uint (face, "mouth.x", (guint *) & rr.x);
-    gst_structure_get_uint (face, "mouth.y", (guint *) & rr.y);
-    gst_structure_get_uint (face, "mouth.width", (guint *) & rr.width);
-    gst_structure_get_uint (face, "mouth.height", (guint *) & rr.height);
     gst_speaker_track_draw_rect_spots (img, &rr, CV_RGB (cr, cg, cb), 1);
   }
 
-  have_eyes = gst_structure_has_field (face, "eyes.x");
+  have_eyes = gst_speaker_track_get_face_rect (face, &rr, "eyes.");
   if (have_eyes && filter->display_eyes) {
-    gst_structure_get_uint (face, "eyes.x", (guint *) & rr.x);
-    gst_structure_get_uint (face, "eyes.y", (guint *) & rr.y);
-    gst_structure_get_uint (face, "eyes.width", (guint *) & rr.width);
-    gst_structure_get_uint (face, "eyes.height", (guint *) & rr.height);
-
     center.x = rr.x;
     center.y = rr.y;
     cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
@@ -768,7 +773,7 @@ gst_speaker_track_mark_faces (GstSpeakerTrack * filter, IplImage * img)
   }
 
   if (!active_marked) {
-    gst_speaker_track_mark_face (filter, img, filter->active_face, i);
+    gst_speaker_track_mark_face (filter, img, filter->active_face, 0);
   }
 }
 
