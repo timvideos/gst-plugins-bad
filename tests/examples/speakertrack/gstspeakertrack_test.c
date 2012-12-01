@@ -141,7 +141,7 @@ on_pad_added (GstElement * element, GstPad * pad, gpointer data)
 static gboolean
 on_video_expose (GtkWidget * widget, GdkEventExpose * event, gpointer data)
 {
-  g_print ("video expose\n");
+  //g_print ("video expose\n");
   return FALSE;
 }
 
