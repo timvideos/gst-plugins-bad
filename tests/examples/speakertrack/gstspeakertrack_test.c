@@ -146,6 +146,37 @@ on_video_expose (GtkWidget * widget, GdkEventExpose * event, gpointer data)
 }
 
 static gboolean
+on_video_motioned (GtkWidget * widget, GdkEventMotion * event, gpointer data)
+{
+  //g_print ("motion: %lf, %lf\n", event->x, event->y);
+  return FALSE;
+}
+
+static gboolean
+on_video_pressed (GtkWidget * widget, GdkEventButton * event, gpointer data)
+{
+  gint x = (gint) event->x;
+  gint y = (gint) event->y;
+  GstElement *tracker = (GstElement *) data;
+  GstStructure *s = gst_structure_new ("select",
+      "x", G_TYPE_INT, x,
+      "y", G_TYPE_INT, y,
+      NULL);
+  GstEvent *selev = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM, s);
+  //GstPad * pad;
+
+  s = NULL;
+
+  if (!gst_element_send_event (tracker, selev)) {
+    g_warning ("can't send select event\n");
+  }
+  //g_print ("press: %d, (%d, %d)\n", event->button, x, y);
+
+  selev = NULL;
+  return TRUE;
+}
+
+static gboolean
 add_file_source (GstElement * pipe, const char *filename, const char *profile)
 {
   GstElement *source, *dvdemuxer, *audioconverter, *dvdecoder;
@@ -300,6 +331,21 @@ main (int argc, char **argv)
   video_window = gtk_drawing_area_new ();
   g_signal_connect (video_window, "expose-event", G_CALLBACK (on_video_expose),
       NULL);
+
+  g_signal_connect (video_window, "motion-notify-event",
+      G_CALLBACK (on_video_motioned), NULL);
+
+  g_signal_connect (video_window, "button-press-event",
+      G_CALLBACK (on_video_pressed), gst_bin_get_by_name (GST_BIN (bin),
+          "speaker-tracker"));
+
+  gtk_widget_set_events (video_window, GDK_EXPOSURE_MASK
+      //| GDK_LEAVE_NOTIFY_MASK
+      | GDK_BUTTON_PRESS_MASK
+      //| GDK_POINTER_MOTION_MASK
+      //| GDK_POINTER_MOTION_HINT_MASK
+      );
+
   gtk_widget_set_double_buffered (video_window, FALSE);
   gtk_container_add (GTK_CONTAINER (window), video_window);
   gtk_container_set_border_width (GTK_CONTAINER (window), 5);
