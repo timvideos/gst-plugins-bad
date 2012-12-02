@@ -213,6 +213,9 @@ gst_speaker_track_finalize (GObject * obj)
   g_free (filter->mouth_profile);
   g_free (filter->eyes_profile);
 
+  g_list_free_full (filter->faces, (GDestroyNotify) gst_structure_free);
+  gst_structure_free (filter->active_face);
+
   if (filter->cvSpeakerTrack)
     cvReleaseHaarClassifierCascade (&filter->cvSpeakerTrack);
   if (filter->cvNoseDetect)
@@ -716,12 +719,31 @@ gst_speaker_track_get_face_rect (GstStructure * face, CvRect * rect,
   return FALSE;
 }
 
-/*
 static gboolean
-gst_speaker_track_compare_face (GstSpeakerTrack * filter, GstStructure * face1, GstStructure * face2)
+gst_speaker_track_compare_face (GstSpeakerTrack * filter, GstStructure * face1,
+    GstStructure * face2)
 {
+  CvRect r1, r2, r;
+  float a = FACE_MOTION_RATE, iw, ih;
+
+  gst_speaker_track_get_face_rect (face1, &r1, "");
+  gst_speaker_track_get_face_rect (face2, &r2, "");
+  r.x = max (r1.x, r2.x);
+  r.y = max (r1.y, r2.y);
+  r.width = min (r1.x + r1.width, r2.x + r2.width) - r1.x;
+  r.height = min (r1.y + r1.height, r2.y + r2.height) - r2.y;
+  if (r.width < 0 || r.height < 0) {
+    r.width = 0, r.height = 0;
+  }
+
+  iw = (float) r.width / (float) r1.width;
+  ih = (float) r.height / (float) r1.height;
+  if (a <= iw && a <= ih) {
+    return TRUE;
+  }
+
+  return FALSE;
 }
-*/
 
 static void
 gst_speaker_track_select_face (GstSpeakerTrack * filter, gint x, gint y)
@@ -729,9 +751,8 @@ gst_speaker_track_select_face (GstSpeakerTrack * filter, gint x, gint y)
   CvRect r;
   GList *face;
 
-  //g_print ("event: select(%d, %d)\n", x, y);
   if (!filter->faces) {
-    g_print ("select: no faces, (%d, %d)", x, y);
+    g_print ("select: no faces, (%d, %d)\n", x, y);
     return;
   }
 
@@ -739,7 +760,7 @@ gst_speaker_track_select_face (GstSpeakerTrack * filter, gint x, gint y)
     if (gst_speaker_track_get_face_rect (GST_STRUCTURE (face->data), &r, "")) {
       if (r.x <= x && r.y <= y && x <= (r.x + r.width) && y <= (r.y + r.height)) {
         filter->active_face = gst_structure_copy (GST_STRUCTURE (face->data));
-        g_print ("select: [(%d, %d), %d, %d]", r.x, r.y, r.width, r.height);
+        g_print ("select: [(%d, %d), %d, %d]\n", r.x, r.y, r.width, r.height);
       }
     }
   }
@@ -844,7 +865,6 @@ gst_speaker_track_mark_faces (GstSpeakerTrack * filter, IplImage * img)
 static void
 gst_speaker_track_update_faces (GstSpeakerTrack * filter, GList * newfaces)
 {
-  CvRect r1, r2, r;
   GList *face, *newface;
 
   if (!filter->faces) {
@@ -855,23 +875,11 @@ gst_speaker_track_update_faces (GstSpeakerTrack * filter, GList * newfaces)
   for (face = filter->faces; face; face = face->next) {
     //g_print ("newfaces: %d\n", g_list_length (newfaces));
     for (newface = newfaces; newface; newface = newface->next) {
-      float a = FACE_MOTION_RATE, iw, ih;
       if (!newface->data)
         continue;
 
-      gst_speaker_track_get_face_rect (GST_STRUCTURE (face->data), &r1, "");
-      gst_speaker_track_get_face_rect (GST_STRUCTURE (newface->data), &r2, "");
-      r.x = max (r1.x, r2.x);
-      r.y = max (r1.y, r2.y);
-      r.width = min (r1.x + r1.width, r2.x + r2.width) - r1.x;
-      r.height = min (r1.y + r1.height, r2.y + r2.height) - r2.y;
-      if (r.width < 0 || r.height < 0) {
-        r.width = 0, r.height = 0;
-      }
-
-      iw = (float) r.width / (float) r1.width;
-      ih = (float) r.height / (float) r1.height;
-      if (a <= iw && a <= ih) {
+      if (gst_speaker_track_compare_face (filter, GST_STRUCTURE (face->data),
+              GST_STRUCTURE (newface->data))) {
         gst_structure_free (GST_STRUCTURE (face->data));
         face->data = newface->data;
         newface->data = NULL;
@@ -892,8 +900,14 @@ gst_speaker_track_update_faces (GstSpeakerTrack * filter, GList * newfaces)
 
   g_list_free (newfaces);
 
-  if (filter->active_person) {
-
+  if (filter->active_face) {
+    for (face = filter->faces; face; face = face->next) {
+      if (gst_speaker_track_compare_face (filter, filter->active_face,
+              GST_STRUCTURE (face->data))) {
+        gst_structure_free (filter->active_face);
+        filter->active_face = gst_structure_copy (GST_STRUCTURE (face->data));
+      }
+    }
   }
 }
 
