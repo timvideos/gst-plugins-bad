@@ -342,13 +342,14 @@ gst_speaker_track_class_init (GstSpeakerTrackClass * klass)
           "Minimum area height to be recognized as a face", 0, G_MAXINT,
           DEFAULT_MIN_SIZE_HEIGHT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  element_class->send_event = gst_speaker_track_send_event;
+  element_class->send_event = GST_DEBUG_FUNCPTR (gst_speaker_track_send_event);
 
   gst_element_class_set_static_metadata (element_class,
       "speakertrack",
       "Filter/Effect/Video",
-      "Performs face detection on videos and images, providing detected positions via bus messages",
-      "Michael Sheldon <mike@mikeasoft.com>");
+      "Tracks speaker on videos and images, providing speaker positions via bus messages, "
+      "initiated from Michael Sheldon's face detection module",
+      "Duzy Chan <code@duzy.info>");
 
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&src_factory));
