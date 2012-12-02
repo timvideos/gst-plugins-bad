@@ -95,6 +95,10 @@ GST_DEBUG_CATEGORY_STATIC (gst_speaker_track_debug);
 #define DEFAULT_MIN_SIZE_WIDTH 0
 #define DEFAULT_MIN_SIZE_HEIGHT 0
 #define FACE_DETECT_TIME_GAP 6000
+#define FACE_MOTION_RATE 0.65
+
+#define max(a,b) ((a) > (b) ? (a) : (b))
+#define min(a,b) ((a) < (b) ? (a) : (b))
 
 /* Filter signals and args */
 enum
@@ -688,12 +692,6 @@ gst_speaker_track_lock (GstSpeakerTrack * st, IplImage * img, GstBuffer * buf,
   return TRUE;
 }
 
-static void
-gst_speaker_track_select_face (GstSpeakerTrack * filter, gint x, gint y)
-{
-  g_print ("event: select(%d, %d)\n", x, y);
-}
-
 static gboolean
 gst_speaker_track_get_face_rect (GstStructure * face, CvRect * rect,
     const gchar * prefix)
@@ -716,6 +714,35 @@ gst_speaker_track_get_face_rect (GstStructure * face, CvRect * rect,
   }
 
   return FALSE;
+}
+
+/*
+static gboolean
+gst_speaker_track_compare_face (GstSpeakerTrack * filter, GstStructure * face1, GstStructure * face2)
+{
+}
+*/
+
+static void
+gst_speaker_track_select_face (GstSpeakerTrack * filter, gint x, gint y)
+{
+  CvRect r;
+  GList *face;
+
+  //g_print ("event: select(%d, %d)\n", x, y);
+  if (!filter->faces) {
+    g_print ("select: no faces, (%d, %d)", x, y);
+    return;
+  }
+
+  for (face = filter->faces; face; face = g_list_next (face)) {
+    if (gst_speaker_track_get_face_rect (GST_STRUCTURE (face->data), &r, "")) {
+      if (r.x <= x && r.y <= y && x <= (r.x + r.width) && y <= (r.y + r.height)) {
+        filter->active_face = gst_structure_copy (GST_STRUCTURE (face->data));
+        g_print ("select: [(%d, %d), %d, %d]", r.x, r.y, r.width, r.height);
+      }
+    }
+  }
 }
 
 static gboolean
@@ -814,6 +841,62 @@ gst_speaker_track_mark_faces (GstSpeakerTrack * filter, IplImage * img)
   }
 }
 
+static void
+gst_speaker_track_update_faces (GstSpeakerTrack * filter, GList * newfaces)
+{
+  CvRect r1, r2, r;
+  GList *face, *newface;
+
+  if (!filter->faces) {
+    filter->faces = newfaces;
+    return;
+  }
+
+  for (face = filter->faces; face; face = face->next) {
+    //g_print ("newfaces: %d\n", g_list_length (newfaces));
+    for (newface = newfaces; newface; newface = newface->next) {
+      float a = FACE_MOTION_RATE, iw, ih;
+      if (!newface->data)
+        continue;
+
+      gst_speaker_track_get_face_rect (GST_STRUCTURE (face->data), &r1, "");
+      gst_speaker_track_get_face_rect (GST_STRUCTURE (newface->data), &r2, "");
+      r.x = max (r1.x, r2.x);
+      r.y = max (r1.y, r2.y);
+      r.width = min (r1.x + r1.width, r2.x + r2.width) - r1.x;
+      r.height = min (r1.y + r1.height, r2.y + r2.height) - r2.y;
+      if (r.width < 0 || r.height < 0) {
+        r.width = 0, r.height = 0;
+      }
+
+      iw = (float) r.width / (float) r1.width;
+      ih = (float) r.height / (float) r1.height;
+      if (a <= iw && a <= ih) {
+        gst_structure_free (GST_STRUCTURE (face->data));
+        face->data = newface->data;
+        newface->data = NULL;
+        newface = g_list_remove_link (newfaces, newface);
+        break;
+      }
+    }
+    //g_print ("newfaces: %d\n", g_list_length (newfaces));
+  }
+
+  for (newface = newfaces; newface; newface = newface->next) {
+    if (newface->data) {
+      filter->faces = g_list_append (filter->faces, newface->data);
+      newface->data = NULL;
+    }
+    //g_print ("newface: %p\n", newface->data);
+  }
+
+  g_list_free (newfaces);
+
+  if (filter->active_person) {
+
+  }
+}
+
 /* 
  * Performs the face detection
  */
@@ -850,7 +933,7 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     CvSeq *faces;
     CvSeq *mouth = NULL, *nose = NULL, *eyes = NULL;
     gint i, numFaces;
-    GList *last = NULL;
+    GList *last = NULL, *newfaces = NULL;
 
     cvCvtColor (img, filter->cvGray, CV_RGB2GRAY);
     cvClearMemStorage (filter->cvStorage);
@@ -861,8 +944,8 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     }
 
     if (filter->faces) {
-      g_list_free_full (filter->faces, (GDestroyNotify) gst_structure_free);
-      filter->faces = NULL;
+      //g_list_free_full (filter->faces, (GDestroyNotify) gst_structure_free);
+      //filter->faces = NULL;
     }
 
     faces = gst_speaker_track_run_detector (filter, filter->cvSpeakerTrack,
@@ -966,15 +1049,23 @@ gst_speaker_track_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
             "eyes.height", G_TYPE_UINT, sr->height, NULL);
       }
 
-      filter->faces = g_list_append (filter->faces, s);
-      last = filter->faces;
+      newfaces = g_list_append (newfaces, s);
+      last = newfaces;
       s = NULL;
     }
 
+    if (newfaces) {
+      gst_speaker_track_update_faces (filter, newfaces);
+      newfaces = NULL;
+    }
+
     if (last) {
-      i = g_list_position (filter->faces, last);
-      s = gst_structure_copy ((GstStructure *) last->data);
-      gst_speaker_track_lock (filter, img, buf, s, i);
+      /*
+         i = g_list_position (filter->faces, last);
+         s = gst_structure_copy ((GstStructure *) last->data);
+         gst_speaker_track_lock (filter, img, buf, s, i);
+       */
+      (void) gst_speaker_track_lock;
     }
 
     if (do_display) {
