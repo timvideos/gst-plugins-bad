@@ -95,7 +95,8 @@ GST_DEBUG_CATEGORY_STATIC (gst_speaker_track_debug);
 #define DEFAULT_MIN_SIZE_WIDTH 0
 #define DEFAULT_MIN_SIZE_HEIGHT 0
 #define FACE_DETECT_TIME_GAP 6000
-#define FACE_MOTION_RATE 0.65
+#define FACE_MOTION_SCALE 0.65
+#define FACE_MOTION_SHIFT 0.25
 
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define min(a,b) ((a) < (b) ? (a) : (b))
@@ -724,7 +725,8 @@ gst_speaker_track_compare_face (GstSpeakerTrack * filter, GstStructure * face1,
     GstStructure * face2)
 {
   CvRect r1, r2, r;
-  float a = FACE_MOTION_RATE, iw, ih;
+  float a = FACE_MOTION_SCALE, ix, iy, iw, ih;
+  float off = FACE_MOTION_SHIFT;
 
   gst_speaker_track_get_face_rect (face1, &r1, "");
   gst_speaker_track_get_face_rect (face2, &r2, "");
@@ -736,9 +738,11 @@ gst_speaker_track_compare_face (GstSpeakerTrack * filter, GstStructure * face1,
     r.width = 0, r.height = 0;
   }
 
+  ix = (float) abs (r2.x - r1.x) / (float) r1.width;
+  iy = (float) abs (r2.y - r1.y) / (float) r1.height;
   iw = (float) r.width / (float) r1.width;
   ih = (float) r.height / (float) r1.height;
-  if (a <= iw && a <= ih) {
+  if (ix <= off && iy <= off && a <= iw && a <= ih) {
     return TRUE;
   }
 
