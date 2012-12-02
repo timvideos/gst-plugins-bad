@@ -357,61 +357,12 @@ gst_speaker_track_class_init (GstSpeakerTrackClass * klass)
       gst_static_pad_template_get (&sink_factory));
 }
 
-/*
-static gboolean
-gst_speaker_track_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
-{
-  switch (GST_EVENT_TYPE (event)) {
-  case GST_EVENT_CUSTOM_UPSTREAM:
-  case GST_EVENT_CUSTOM_DOWNSTREAM:
-    g_print ("event: %s, %s\n", gst_pad_get_name (pad), GST_EVENT_TYPE_NAME (event));
-    break;
-
-  default:
-    break;
-  }
-  return gst_pad_event_default (pad, parent, event);
-}
-
-static gboolean
-gst_speaker_track_sink_event (GstPad * pad, GstObject * parent,
-    GstEvent * event)
-{
-  switch (GST_EVENT_TYPE (event)) {
-  case GST_EVENT_CUSTOM_UPSTREAM:
-  case GST_EVENT_CUSTOM_DOWNSTREAM:
-    g_print ("event: %s, %s\n", gst_pad_get_name (pad), GST_EVENT_TYPE_NAME (event));
-    break;
-
-  default:
-    break;
-  }
-  return gst_pad_event_default (pad, parent, event);
-}
-*/
-
 /* initialize the new element
  * initialize instance structure
  */
 static void
 gst_speaker_track_init (GstSpeakerTrack * filter)
 {
-#if 1
-  /*
-     GstPad *sinkpad = gst_element_get_static_pad (GST_ELEMENT (filter), "sink");
-     GstPad *srcpad = gst_element_get_static_pad (GST_ELEMENT (filter), "src");
-     gst_pad_set_event_function (sinkpad, gst_speaker_track_sink_event);
-     gst_pad_set_event_function (srcpad, gst_speaker_track_src_event);
-   */
-#else
-  GstPad *srcpad = gst_pad_new_from_static_template (&src_factory, "src");
-  GstPad *sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
-  gst_pad_set_event_function (srcpad, gst_speaker_track_src_event);
-  gst_pad_set_event_function (sinkpad, gst_speaker_track_sink_event);
-  gst_element_add_pad (GST_ELEMENT (filter), sinkpad);
-  gst_element_add_pad (GST_ELEMENT (filter), srcpad);
-#endif
-
   filter->face_profile = g_strdup (DEFAULT_FACE_PROFILE);
   filter->nose_profile = g_strdup (DEFAULT_NOSE_PROFILE);
   filter->mouth_profile = g_strdup (DEFAULT_MOUTH_PROFILE);
