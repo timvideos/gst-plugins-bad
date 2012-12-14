@@ -41,3 +41,4 @@ EXTRA_DIST = \
 #
 #TESTS = gst-element-maker-test.sh
 
+SUBDIRS := gst-switch
