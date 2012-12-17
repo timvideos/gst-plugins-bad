@@ -54,7 +54,17 @@ struct _GstTCPFunnelSrc {
 
   GCancellable *cancellable;
   GSocket *server_socket;
-  GSocket *client_socket;
+  GList *clients;
+  GList *incoming;
+
+  GMutex clients_mutex;
+  GMutex incoming_mutex;
+  GMutex wait_mutex;
+
+  GCond has_incoming;
+  GCond wait_thread_end;
+
+  GThread *wait_thread;
 };
 
 struct _GstTCPFunnelSrcClass {
