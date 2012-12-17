@@ -18,7 +18,7 @@
  */
 
 /**
- * SECTION: element-gsttcpfunnelsrc
+ * SECTION:element-gsttcpfunnelsrc
  *
  * The tcpfunnelsrc element take streams from network via TCP into one
  * stream.
@@ -69,17 +69,27 @@ gst_tcp_funnel_src_finalize (GObject * gobject)
 {
   GstTCPFunnelSrc *src = GST_TCP_FUNNEL_SRC (gobject);
 
-  if (src->cancellable)
+  if (src->cancellable) {
     g_object_unref (src->cancellable);
-  src->cancellable = NULL;
+    src->cancellable = NULL;
+  }
 
-  if (src->server_socket)
+  if (src->server_socket) {
     g_object_unref (src->server_socket);
-  src->server_socket = NULL;
+    src->server_socket = NULL;
 
-  if (src->client_socket)
-    g_object_unref (src->client_socket);
-  src->client_socket = NULL;
+    /* wait for end of accept_thread */
+    g_mutex_lock (&src->wait_mutex);
+    while (src->wait_thread) {
+      g_cond_wait (&src->wait_thread_end, &src->wait_mutex);
+    }
+    g_mutex_unlock (&src->wait_mutex);
+  }
+
+  g_mutex_lock (&src->clients_mutex);
+  g_list_free_full (src->clients, g_object_unref);
+  src->clients = NULL;
+  g_mutex_unlock (&src->clients_mutex);
 
   g_free (src->host);
   src->host = NULL;
@@ -87,44 +97,31 @@ gst_tcp_funnel_src_finalize (GObject * gobject)
   G_OBJECT_CLASS (gst_tcp_funnel_src_parent_class)->finalize (gobject);
 }
 
+#if 0
 static GstFlowReturn
-gst_tcp_funnel_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
+gst_tcp_funnel_src_read_client (GstTCPFunnelSrc * src, GSocket * client_socket,
+    GstBuffer ** outbuf)
 {
-  GstTCPFunnelSrc *src;
   gssize availableBytes, receivedBytes;
   gsize readBytes;
   GstMapInfo map;
   GError *err = NULL;
 
-  src = GST_TCP_FUNNEL_SRC (psrc);
-
-  if (!GST_OBJECT_FLAG_IS_SET (src, GST_TCP_FUNNEL_SRC_OPEN))
-    goto wrong_funnel_src_state;
-
-  if (!src->client_socket) {
-    /* wait on server socket for connections */
-    src->client_socket = g_socket_accept (src->server_socket,
-        src->cancellable, &err);
-    if (!src->client_socket)
-      goto socket_accept_error;
-    /* now read from the socket. */
-  }
-
   /* if we have a client, wait for read */
   GST_LOG_OBJECT (src, "asked for a buffer");
 
   /* read the buffer header */
-  availableBytes = g_socket_get_available_bytes (src->client_socket);
+  availableBytes = g_socket_get_available_bytes (client_socket);
   if (availableBytes < 0) {
     goto socket_get_available_bytes_error;
   } else if (availableBytes == 0) {
     GIOCondition condition;
 
-    if (!g_socket_condition_wait (src->client_socket,
+    if (!g_socket_condition_wait (client_socket,
             G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP, src->cancellable, &err))
       goto socket_condition_wait_error;
 
-    condition = g_socket_condition_check (src->client_socket,
+    condition = g_socket_condition_check (client_socket,
         G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
 
     if ((condition & G_IO_ERR))
@@ -132,7 +129,7 @@ gst_tcp_funnel_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
     else if ((condition & G_IO_HUP))
       goto socket_condition_hup;
 
-    availableBytes = g_socket_get_available_bytes (src->client_socket);
+    availableBytes = g_socket_get_available_bytes (client_socket);
     if (availableBytes < 0)
       goto socket_get_available_bytes_error;
   }
@@ -141,13 +138,20 @@ gst_tcp_funnel_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
     readBytes = MIN (availableBytes, MAX_READ_SIZE);
     *outbuf = gst_buffer_new_and_alloc (readBytes);
     gst_buffer_map (*outbuf, &map, GST_MAP_READWRITE);
-    receivedBytes = g_socket_receive (src->client_socket, (gchar *) map.data,
+    receivedBytes = g_socket_receive (client_socket, (gchar *) map.data,
         readBytes, src->cancellable, &err);
   } else {
     /* Connection closed */
     receivedBytes = 0;
     readBytes = 0;
     *outbuf = NULL;
+  }
+
+  if (receivedBytes <= 0) {
+    g_mutex_lock (&src->clients_mutex);
+    src->clients = g_list_remove (src->clients, client_socket);
+    g_object_unref (client_socket);
+    g_mutex_unlock (&src->clients_mutex);
   }
 
   if (receivedBytes == 0)
@@ -172,12 +176,6 @@ gst_tcp_funnel_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
   return GST_FLOW_OK;
 
   /* Handling Errors */
-wrong_funnel_src_state:
-  {
-    GST_DEBUG_OBJECT (src, "connection to closed, cannot read data");
-    return GST_FLOW_FLUSHING;
-  }
-
 socket_get_available_bytes_error:
   {
     GST_ELEMENT_ERROR (src, RESOURCE, READ, (NULL),
@@ -185,6 +183,7 @@ socket_get_available_bytes_error:
     return GST_FLOW_ERROR;
   }
 
+#if 0
 socket_accept_error:
   {
     if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
@@ -196,6 +195,7 @@ socket_accept_error:
     g_clear_error (&err);
     return GST_FLOW_ERROR;
   }
+#endif
 
 socket_condition_wait_error:
   {
@@ -235,6 +235,7 @@ socket_receive_error:
     gst_buffer_unmap (*outbuf, &map);
     gst_buffer_unref (*outbuf);
     *outbuf = NULL;
+
     if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
       GST_DEBUG_OBJECT (src, "Cancelled reading from socket");
       return GST_FLOW_FLUSHING;
@@ -243,6 +244,147 @@ socket_receive_error:
           ("Failed to read from socket: %s", err->message));
       return GST_FLOW_ERROR;
     }
+  }
+}
+#endif
+
+static GstFlowReturn
+gst_tcp_funnel_src_read_client (GstTCPFunnelSrc * src, GSocket * client_socket,
+    GstBuffer ** outbuf)
+{
+  gssize availableBytes, receivedBytes;
+  gsize readBytes;
+  GstMapInfo map;
+  GError *err = NULL;
+
+  /* if we have a client, wait for read */
+  GST_LOG_OBJECT (src, "asked for a buffer");
+
+  /* read the buffer header */
+  availableBytes = g_socket_get_available_bytes (client_socket);
+  if (availableBytes < 0) {
+    goto socket_get_available_bytes_error;
+  } else if (availableBytes == 0) {
+    return GST_FLOW_EOS;
+  }
+
+  if (0 < availableBytes) {
+    readBytes = MIN (availableBytes, MAX_READ_SIZE);
+    *outbuf = gst_buffer_new_and_alloc (readBytes);
+    gst_buffer_map (*outbuf, &map, GST_MAP_READWRITE);
+    receivedBytes = g_socket_receive (client_socket, (gchar *) map.data,
+        readBytes, src->cancellable, &err);
+  } else {
+    /* Connection closed */
+    receivedBytes = 0;
+    readBytes = 0;
+    *outbuf = NULL;
+  }
+
+  if (receivedBytes <= 0) {
+    g_mutex_lock (&src->clients_mutex);
+    src->clients = g_list_remove (src->clients, client_socket);
+    g_object_unref (client_socket);
+    g_mutex_unlock (&src->clients_mutex);
+  }
+
+  if (receivedBytes == 0)
+    goto socket_connection_closed;
+  else if (receivedBytes < 0)
+    goto socket_receive_error;
+
+  gst_buffer_unmap (*outbuf, &map);
+  gst_buffer_resize (*outbuf, 0, receivedBytes);
+
+  GST_LOG_OBJECT (src,
+      "Returning buffer from _get of size %" G_GSIZE_FORMAT
+      ", ts %" GST_TIME_FORMAT ", dur %" GST_TIME_FORMAT
+      ", offset %" G_GINT64_FORMAT ", offset_end %" G_GINT64_FORMAT,
+      gst_buffer_get_size (*outbuf),
+      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (*outbuf)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (*outbuf)),
+      GST_BUFFER_OFFSET (*outbuf), GST_BUFFER_OFFSET_END (*outbuf));
+
+  g_clear_error (&err);
+
+  return GST_FLOW_OK;
+
+  /* Handling Errors */
+socket_get_available_bytes_error:
+  {
+    GST_ELEMENT_ERROR (src, RESOURCE, READ, (NULL),
+        ("Failed to get available bytes from socket"));
+    return GST_FLOW_ERROR;
+  }
+
+socket_connection_closed:
+  {
+    GST_DEBUG_OBJECT (src, "Connection closed");
+    if (*outbuf) {
+      gst_buffer_unmap (*outbuf, &map);
+      gst_buffer_unref (*outbuf);
+    }
+    *outbuf = NULL;
+    return GST_FLOW_EOS;
+  }
+
+socket_receive_error:
+  {
+    gst_buffer_unmap (*outbuf, &map);
+    gst_buffer_unref (*outbuf);
+    *outbuf = NULL;
+
+    if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
+      GST_DEBUG_OBJECT (src, "Cancelled reading from socket");
+      return GST_FLOW_FLUSHING;
+    } else {
+      GST_ELEMENT_ERROR (src, RESOURCE, READ, (NULL),
+          ("Failed to read from socket: %s", err->message));
+      return GST_FLOW_ERROR;
+    }
+  }
+}
+
+
+static GstFlowReturn
+gst_tcp_funnel_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
+{
+  GstTCPFunnelSrc *src;
+  GSocket *client_socket;
+
+  src = GST_TCP_FUNNEL_SRC (psrc);
+
+  if (!GST_OBJECT_FLAG_IS_SET (src, GST_TCP_FUNNEL_SRC_OPEN))
+    goto wrong_funnel_src_state;
+
+read_incoming:
+
+  g_mutex_lock (&src->incoming_mutex);
+
+  while (!src->incoming)
+    g_cond_wait (&src->has_incoming, &src->incoming_mutex);
+
+  client_socket = (GSocket *) src->incoming->data;
+  src->incoming = g_list_next (src->incoming);
+
+  g_mutex_unlock (&src->incoming_mutex);
+
+  g_print ("read: %p, %p (%d)\n", client_socket, src->incoming,
+      g_list_length (src->incoming));
+
+  if (client_socket)
+    gst_tcp_funnel_src_read_client (src, client_socket, outbuf);
+
+  if (src->incoming)
+    goto read_incoming;
+
+  return *outbuf ? GST_FLOW_OK : GST_FLOW_FLUSHING;
+
+  /* Handling Errors */
+wrong_funnel_src_state:
+  {
+    GST_DEBUG_OBJECT (src, "connection to closed, cannot read data");
+    return GST_FLOW_FLUSHING;
   }
 }
 
@@ -297,18 +439,23 @@ static gboolean
 gst_tcp_funnel_src_stop (GstBaseSrc * bsrc)
 {
   GstTCPFunnelSrc *src = GST_TCP_FUNNEL_SRC (bsrc);
+  GSocket *socket;
   GError *err = NULL;
+  GList *client;
 
-  if (src->client_socket) {
-    GST_DEBUG_OBJECT (src, "closing socket");
-
-    if (!g_socket_close (src->client_socket, &err)) {
+  GST_DEBUG_OBJECT (src, "closing client sockets");
+  g_mutex_lock (&src->clients_mutex);
+  for (client = src->clients; client; client = g_list_next (client)) {
+    socket = (GSocket *) client->data;
+    if (!g_socket_close (socket, &err)) {
       GST_ERROR_OBJECT (src, "Failed to close socket: %s", err->message);
       g_clear_error (&err);
     }
-    g_object_unref (src->client_socket);
-    src->client_socket = NULL;
+    g_object_unref (socket);
   }
+  g_list_free (src->clients);
+  src->clients = NULL;
+  g_mutex_unlock (&src->clients_mutex);
 
   if (src->server_socket) {
     GST_DEBUG_OBJECT (src, "closing socket");
@@ -320,6 +467,13 @@ gst_tcp_funnel_src_stop (GstBaseSrc * bsrc)
     g_object_unref (src->server_socket);
     src->server_socket = NULL;
 
+    /* wait for end of accept_thread */
+    g_mutex_lock (&src->wait_mutex);
+    while (src->wait_thread) {
+      g_cond_wait (&src->wait_thread_end, &src->wait_mutex);
+    }
+    g_mutex_unlock (&src->wait_mutex);
+
     g_atomic_int_set (&src->bound_port, 0);
     g_object_notify (G_OBJECT (src), "bound-port");
   }
@@ -327,6 +481,85 @@ gst_tcp_funnel_src_stop (GstBaseSrc * bsrc)
   GST_OBJECT_FLAG_UNSET (src, GST_TCP_FUNNEL_SRC_OPEN);
 
   return TRUE;
+}
+
+static gboolean
+gst_tcp_funnel_src_socket_source (GPollableInputStream * stream,
+    GIOCondition condition, gpointer data)
+{
+  GSocket *socket = (GSocket *) stream;
+  GstTCPFunnelSrc *src = (GstTCPFunnelSrc *) data;
+  gssize availableBytes = g_socket_get_available_bytes (socket);
+  GList *found = NULL;
+  gboolean needSignal = FALSE;
+
+  g_mutex_lock (&src->clients_mutex);
+  found = g_list_find (src->clients, socket);
+  g_mutex_unlock (&src->clients_mutex);
+
+  //g_print ("source: %p, %p, %"G_GSSIZE_FORMAT"\n", socket, found, availableBytes);
+
+  if (availableBytes == 0 && found == NULL)
+    goto socket_eof;
+  if (availableBytes < 0)
+    goto socket_error;
+
+  g_print ("source: %p, %p (%d), %" G_GSSIZE_FORMAT "byte(s)\n", socket,
+      src->incoming, g_list_length (src->incoming), availableBytes);
+
+  g_mutex_lock (&src->incoming_mutex);
+  found = g_list_find (src->incoming, socket);
+  needSignal = (src->incoming == NULL);
+  if (found == NULL)
+    src->incoming = g_list_append (src->incoming, socket);
+  if (needSignal)
+    g_cond_signal (&src->has_incoming);
+  g_mutex_unlock (&src->incoming_mutex);
+
+  return TRUE;
+
+socket_eof:
+  return FALSE;
+
+socket_error:
+  GST_ERROR_OBJECT (src, "Client socket closed");
+  return FALSE;
+}
+
+static gpointer
+gst_tcp_funnel_src_wait_thread (gpointer data)
+{
+  GstTCPFunnelSrc *src = (GstTCPFunnelSrc *) data;
+  GSocket *socket;
+  GSource *source;
+  GError *err;
+
+  while (src->server_socket && src->cancellable) {
+    socket = g_socket_accept (src->server_socket, src->cancellable, &err);
+    if (!socket) {
+      continue;
+    }
+
+    g_print ("incoming socket..\n");
+
+    g_mutex_lock (&src->clients_mutex);
+    src->clients = g_list_append (src->clients, socket);
+    g_mutex_unlock (&src->clients_mutex);
+
+    source = g_socket_create_source (socket, G_IO_IN, src->cancellable);
+    g_source_set_callback (source,
+        (GSourceFunc) gst_tcp_funnel_src_socket_source, src, NULL);
+    g_source_attach (source, NULL);
+    g_source_unref (source);
+  }
+
+  g_print ("wait thread end..\n");
+
+  g_mutex_lock (&src->wait_mutex);
+  src->wait_thread = NULL;
+  g_cond_signal (&src->wait_thread_end);
+  g_mutex_unlock (&src->wait_mutex);
+  return NULL;
 }
 
 /* set up server */
@@ -402,6 +635,9 @@ gst_tcp_funnel_src_start (GstBaseSrc * bsrc)
 
   g_atomic_int_set (&src->bound_port, bound_port);
   g_object_notify (G_OBJECT (src), "bound-port");
+
+  src->wait_thread = g_thread_new ("TCPFunnelSrc",
+      gst_tcp_funnel_src_wait_thread, src);
 
   return TRUE;
 
@@ -526,14 +762,51 @@ gst_tcp_funnel_src_class_init (GstTCPFunnelSrcClass * klass)
   push_src_class->create = gst_tcp_funnel_src_create;
 }
 
+/*
+static gboolean
+gst_tcp_funnel_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
+{
+  GstPad * srcpad = GST_BASE_SRC_PAD (GST_BASE_SRC (parent));
+
+  g_print ("event: %s\n", GST_EVENT_TYPE_NAME (event));
+  
+  return gst_pad_push_event (srcpad, event);
+}
+*/
+
+/*
+static GstFlowReturn
+gst_tcp_funnel_src_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
+{
+  GstPad * srcpad = GST_BASE_SRC_PAD (GST_BASE_SRC (parent));
+
+  g_print ("chain: %s\n", "...");
+
+  return gst_pad_push (srcpad, buffer);
+}
+*/
+
 static void
 gst_tcp_funnel_src_init (GstTCPFunnelSrc * src)
 {
+  GstPad *srcpad = GST_BASE_SRC_PAD (GST_BASE_SRC (src));
+  //gst_pad_set_event_function (srcpad, gst_tcp_funnel_src_event);
+  //gst_pad_set_chain_function (srcpad, gst_tcp_funnel_src_chain);
+
+  (void) srcpad;
+
   src->server_port = TCP_DEFAULT_PORT;
   src->host = g_strdup (TCP_DEFAULT_HOST);
   src->server_socket = NULL;
-  src->client_socket = NULL;
+  src->clients = NULL;
+  src->incoming = NULL;
   src->cancellable = g_cancellable_new ();
+
+  g_mutex_init (&src->clients_mutex);
+  g_mutex_init (&src->incoming_mutex);
+  g_mutex_init (&src->wait_mutex);
+  g_cond_init (&src->has_incoming);
+  g_cond_init (&src->wait_thread_end);
 
   GST_OBJECT_FLAG_UNSET (src, GST_TCP_FUNNEL_SRC_OPEN);
 }
