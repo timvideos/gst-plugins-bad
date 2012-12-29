@@ -234,7 +234,10 @@ AM_CONDITIONAL(HAVE_GTK, test "x$HAVE_GTK" = "xyes")
 dnl Needed for GtkBuilder to autoconnect signals
 PKG_CHECK_MODULES(GMODULE_EXPORT, gmodule-export-2.0, HAVE_GMODULE_EXPORT=yes, HAVE_GMODULE_EXPORT=no)
 
-dnl x11 is optional for librfb
+dnl Needed by plugins that use g_module_*() API
+PKG_CHECK_MODULES(GMODULE_NO_EXPORT, gmodule-no-export-2.0)
+
+dnl x11 is optional for librfb and eglglessink
 HAVE_X11=NO
 PKG_CHECK_MODULES(X11, x11, HAVE_X11=yes, HAVE_X11=no)
 AC_SUBST(X11_LIBS)
@@ -321,7 +324,7 @@ GST_PLUGINS_NONPORTED=" aiff \
  gsettings jasper ladspa \
  musepack musicbrainz nas neon ofa openal rsvg sdl sndfile timidity \
  directdraw direct3d9 acm wininet \
- wildmidi xvid lv2 teletextdec sndio uvch264"
+ wildmidi xvid lv2 teletextdec sndio uvch264 wasapi"
 AC_SUBST(GST_PLUGINS_NONPORTED)
 
 dnl these are all the gst plug-ins, compilable without additional libs
@@ -374,8 +377,6 @@ AG_GST_CHECK_PLUGIN(pnm)
 AG_GST_CHECK_PLUGIN(rawparse)
 AG_GST_CHECK_PLUGIN(real)
 AG_GST_CHECK_PLUGIN(removesilence)
-AG_GST_CHECK_PLUGIN(rtpmux)
-AG_GST_CHECK_PLUGIN(scaletempo)
 AG_GST_CHECK_PLUGIN(sdi)
 AG_GST_CHECK_PLUGIN(sdp)
 AG_GST_CHECK_PLUGIN(segmentclip)
@@ -456,6 +457,54 @@ AG_GST_CHECK_FEATURE(DIRECTSOUND, [DirectSound], directsoundsrc, [
   AC_SUBST(HAVE_DIRECTSOUND)
 ])
 
+dnl WASAPI
+translit(dnm, m, l) AM_CONDITIONAL(USE_WASAPI, true)
+AG_GST_CHECK_FEATURE(WASAPI, [WASAPI plug-in], wasapi, [
+  HAVE_WASAPI="no"
+  save_CFLAGS="$CFLAGS"
+  save_LDFLAGS="$LDFLAGS"
+  save_LIBS="$LIBS"
+  CFLAGS="$CFLAGS $DIRECTX_CFLAGS"
+  LDFLAGS="$LDFLAGS $DIRECTX_LDFLAGS"
+  LIBS="$LIBS -lole32 -lwinmm -lksuser"
+  AC_MSG_CHECKING(for WASAPI LDFLAGS)
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#include <windows.h>
+#include <stdio.h>
+#include <mmsystem.h>
+#include <mmdeviceapi.h>
+]], [[
+int main ()
+{
+    HRESULT hr = S_OK;
+
+    hr = CoInitialize(NULL);
+    if (FAILED(hr)) {
+        printf("CoInitialize failed: hr = 0x%08x", hr);
+        return __LINE__;
+    }
+
+	int result = 0;
+    // result = do_everything(argc, argv);
+    
+    CoUninitialize();
+    return result;
+}
+]])],
+    [HAVE_WASAPI="yes"],
+    [HAVE_WASAPI="no"])
+  AC_MSG_RESULT($HAVE_WASAPI)
+  CFLAGS=$save_CFLAGS
+  LDFLAGS=$save_LDFLAGS
+  LIBS=$save_LIBS
+
+  if test "x$HAVE_WASAPI" = "xyes";  then
+    WASAPI_LIBS="-lole32 -lwinmm -lksuser"
+    AC_SUBST(WASAPI_LIBS)
+  fi
+  AC_SUBST(HAVE_WASAPI)
+])
+
 dnl Direct3D
 translit(dnm, m, l) AM_CONDITIONAL(USE_DIRECT3D, true)
 AG_GST_CHECK_FEATURE(DIRECT3D, [Direct3D plug-in], direct3dsink, [
@@ -481,7 +530,7 @@ AG_GST_CHECK_FEATURE(DIRECT3D, [Direct3D plug-in], direct3dsink, [
   LIBS=$save_LIBS
 
   if test "x$HAVE_DIRECT3D" = "xyes";  then
-    DIRECT3D_LIBS="-lgdi32"
+    DIRECT3D_LIBS="-ld3d9 -lgdi32"
     AC_SUBST(DIRECT3D_LIBS)
   fi
   AC_SUBST(HAVE_DIRECT3D)
@@ -525,13 +574,14 @@ AG_GST_CHECK_FEATURE(DIRECTDRAW, [DirectDraw plug-in], directdrawsink, [
 dnl Direct3D9
 AM_CONDITIONAL(USE_DIRECT3D9, true)
 AG_GST_CHECK_FEATURE(DIRECT3D9, [Direct3D9], winscreencap, [
-  HAVE_DIRECT3D="no"
-
+  HAVE_DIRECT3D9="no"
+  save_CFLAGS="$CFLAGS"
+  save_LDFLAGS="$LDFLAGS"
   save_LIBS="$LIBS"
-
+  CFLAGS="$CFLAGS $DIRECTX_CFLAGS"
+  LDFLAGS="$LDFLAGS $DIRECTX_LDFLAGS"
   LIBS="$LIBS -ld3d9 -lgdi32"
   AC_MSG_CHECKING(for Direct3D9 LDFLAGS)
-
   AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #include <windows.h>
 #include <d3d9.h>
@@ -541,7 +591,8 @@ AG_GST_CHECK_FEATURE(DIRECT3D9, [Direct3D9], winscreencap, [
     [HAVE_DIRECT3D9="yes"],
     [HAVE_DIRECT3D9="no"])
   AC_MSG_RESULT($HAVE_DIRECT3D9)
-
+  CFLAGS=$save_CFLAGS
+  LDFLAGS=$save_LDFLAGS
   LIBS=$save_LIBS
 
   if test "x$HAVE_DIRECT3D9" = "xyes";  then
@@ -682,15 +733,24 @@ AG_GST_CHECK_FEATURE(QUICKTIME, [QuickTime wrapper], qtwrapper, [
 dnl check for shm_open (for shm plugin)
 translit(dnm, m, l) AM_CONDITIONAL(USE_SHM, true)
 AG_GST_CHECK_FEATURE(SHM, [POSIX shared memory source and sink], shm, [
-  if test "x$HAVE_SYS_SOCKET_H" = "xyes"; then
-    AC_CHECK_LIB([rt], [shm_open],
-       AC_CHECK_DECL([MSG_NOSIGNAL], HAVE_SHM=yes, HAVE_SHM=no, [
-#include <sys/socket.h>
-	 ]),
-	 HAVE_SHM=no)
-  else
-    HAVE_SHM=no
-  fi
+    if test "x$HAVE_SYS_SOCKET_H" = "xyes"; then
+        case $host in
+        *-darwin* | *-macos10*)
+            AC_DEFINE(HAVE_OSX,[1],[Apple Mac OS X operating system detected])
+            HAVE_SHM=yes
+            ;;
+        *)
+            AC_CHECK_LIB([rt], [shm_open],
+                AC_CHECK_DECL([MSG_NOSIGNAL], HAVE_SHM=yes, HAVE_SHM=no, [
+                #include <sys/socket.h>
+  	            ]),
+                HAVE_SHM=no)
+            AC_SUBST(SHM_LIBS, "-lrt")
+            ;;
+        esac
+    else
+        HAVE_SHM=no
+    fi
 ])
 
 dnl check for Video CD
@@ -1081,6 +1141,18 @@ AG_GST_CHECK_FEATURE(JASPER, [jasper], jasperdec jasperenc, [
   AG_GST_CHECK_LIBHEADER(JASPER, jasper, jas_stream_fopen, , jasper/jasper.h,
     JASPER_LIBS="-ljasper")
   AC_SUBST(JASPER_LIBS)
+])
+
+dnl *** OpenJPEG ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_OPENJPEG, true)
+AG_GST_CHECK_FEATURE(OPENJPEG, [openjpeg library], openjpeg, [
+  HAVE_OPENJPEG="no"
+  PKG_CHECK_MODULES(OPENJPEG, libopenjpeg1,
+    HAVE_OPENJPEG="yes",
+    AG_GST_CHECK_LIBHEADER(OPENJPEG, openjpeg, opj_version, , openjpeg.h, OPENJPEG_LIBS="-lopenjpeg")
+  )
+  AC_SUBST(OPENJPEG_CFLAGS)
+  AC_SUBST(OPENJPEG_LIBS)
 ])
 
 dnl *** kate ***
@@ -1516,31 +1588,88 @@ AG_GST_CHECK_FEATURE(RSVG, [rsvg decoder], rsvg, [
 ])
 
 dnl *** eglgles ***
+AC_ARG_WITH([egl-window-system],
+              AS_HELP_STRING([--with-egl-window-system],[EGL window system to use (x11, mali-fb, none)]),
+              [EGL_WINDOW_SYSTEM="$withval"],
+              [EGL_WINDOW_SYSTEM="none"])
+
 translit(dnm, m, l) AM_CONDITIONAL(USE_EGLGLES, true)
 AG_GST_CHECK_FEATURE(EGLGLES, [eglgles sink], eglgles, [
   HAVE_EGLGLES="no"
-  PKG_CHECK_MODULES(EGLGLES, egl glesv2, HAVE_EGLGLES="yes", [
-    HAVE_EGLGLES="no"
-    old_LIBS=$LIBS
-    old_CFLAGS=$CFLAGS
-    AC_CHECK_LIB([GLESv2], [glEnable],
-      [
-        AC_CHECK_HEADER([GLES2/gl2.h],
+
+  case "$EGL_WINDOW_SYSTEM" in
+    x11|none)
+      PKG_CHECK_MODULES(EGLGLES, egl glesv2, HAVE_EGLGLES="yes", [
+        HAVE_EGLGLES="no"
+        old_LIBS=$LIBS
+        old_CFLAGS=$CFLAGS
+        AC_CHECK_LIB([GLESv2], [glEnable],
           [
-            AC_CHECK_LIB([EGL], [eglGetProcAddress],
+            AC_CHECK_HEADER([GLES2/gl2.h],
               [
-                AC_CHECK_HEADER([EGL/egl.h],
+                AC_CHECK_LIB([EGL], [eglGetProcAddress],
                   [
-                    HAVE_EGLGLES="yes"
-                    EGLGLES_LIBS="-lGLESv2 -lEGL"
-                    EGLGLES_CFLAGS=""
+                    AC_CHECK_HEADER([EGL/egl.h],
+                      [
+                        HAVE_EGLGLES="yes"
+                        EGLGLES_LIBS="-lGLESv2 -lEGL"
+                        EGLGLES_CFLAGS=""
+                      ])
                   ])
               ])
           ])
+        LIBS=$old_LIBS
+        CFLAGS=$old_CFLAGS
       ])
-    LIBS=$old_LIBS
-    CFLAGS=$old_CFLAGS
-  ])
+      
+      if test x"$HAVE_EGLGLES" = x"yes" -a x"$EGL_WINDOW_SYSTEM" = x"x11"; then
+        if test x"$HAVE_X11" != x"yes"; then
+          AC_MSG_ERROR([libX11 not found and is required for EGL X11 window system])
+        else
+          AC_DEFINE(USE_EGL_X11, [1], [Use X11 EGL window system])
+          EGLGLES_CFLAGS="$EGLGLES_CFLAGS $X11_CFLAGS"
+          EGLGLES_LIBS="$EGLGLES_LIBS $X11_LIBS"
+        fi
+      fi
+      ;;
+    mali-fb)
+      HAVE_EGLGLES="no"
+      AC_CHECK_HEADER([EGL/fbdev_window.h],
+        [
+          old_LIBS=$LIBS
+          old_CFLAGS=$CFLAGS
+
+          LIBS="$LIBS -lUMP"
+          AC_CHECK_LIB([Mali], [mali_image_create],
+            [
+              LIBS="$LIBS -lMali"
+              AC_CHECK_LIB([GLESv2], [glEnable],
+                [
+                  AC_CHECK_HEADER([GLES2/gl2.h],
+                    [
+                      AC_CHECK_LIB([EGL], [eglGetProcAddress],
+                        [
+                          AC_CHECK_HEADER([EGL/egl.h],
+                            [
+                              HAVE_EGLGLES="yes"
+                              EGLGLES_LIBS="-lGLESv2 -lEGL -lMali -lUMP"
+                              EGLGLES_CFLAGS=""
+                              AC_DEFINE(USE_EGL_MALI_FB, [1], [Use Mali FB EGL window system])
+                            ])
+                        ])
+                    ])
+                ])
+            ])
+
+          LIBS=$old_LIBS
+          CFLAGS=$old_CFLAGS
+        ])
+      ;;
+    *)
+      AC_MSG_ERROR([invalid EGL window system specified])
+      ;;
+  esac
+
   AC_SUBST(EGLGLES_CFLAGS)
   AC_SUBST(EGLGLES_LIBS)
 ])
@@ -1884,6 +2013,7 @@ AM_CONDITIONAL(USE_FBDEV, false)
 AM_CONDITIONAL(USE_FLITE, false)
 AM_CONDITIONAL(USE_GSM, false)
 AM_CONDITIONAL(USE_JASPER, false)
+AM_CONDITIONAL(USE_OPENJPEG, false)
 AM_CONDITIONAL(USE_KATE, false)
 AM_CONDITIONAL(USE_TIGER, false)
 AM_CONDITIONAL(USE_LADSPA, false)
@@ -2059,8 +2189,6 @@ gst/pnm/Makefile
 gst/rawparse/Makefile
 gst/real/Makefile
 gst/removesilence/Makefile
-gst/rtpmux/Makefile
-gst/scaletempo/Makefile
 gst/sdi/Makefile
 gst/sdp/Makefile
 gst/segmentclip/Makefile
@@ -2120,7 +2248,6 @@ tests/examples/Makefile
 tests/examples/camerabin2/Makefile
 tests/examples/directfb/Makefile
 tests/examples/mxf/Makefile
-tests/examples/scaletempo/Makefile
 tests/examples/opencv/Makefile
 tests/examples/speakertrack/Makefile
 tests/examples/uvch264/Makefile
@@ -2164,6 +2291,7 @@ ext/neon/Makefile
 ext/ofa/Makefile
 ext/openal/Makefile
 ext/opencv/Makefile
+ext/openjpeg/Makefile
 ext/opus/Makefile
 ext/rsvg/Makefile
 ext/resindvd/Makefile

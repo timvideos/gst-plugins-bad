@@ -326,8 +326,8 @@ gst_mxf_demux_pull_range (GstMXFDemux * demux, guint64 offset,
 
   if (G_UNLIKELY (*buffer && gst_buffer_get_size (*buffer) != size)) {
     GST_WARNING_OBJECT (demux,
-        "partial pull got %u when expecting %u from offset %" G_GUINT64_FORMAT,
-        gst_buffer_get_size (*buffer), size, offset);
+        "partial pull got %" G_GSIZE_FORMAT " when expecting %u from offset %"
+        G_GUINT64_FORMAT, gst_buffer_get_size (*buffer), size, offset);
     gst_buffer_unref (*buffer);
     ret = GST_FLOW_EOS;
     *buffer = NULL;
@@ -397,7 +397,7 @@ gst_mxf_demux_handle_partition_pack (GstMXFDemux * demux, const MXFUL * key,
   gboolean ret;
 
   GST_DEBUG_OBJECT (demux,
-      "Handling partition pack of size %u at offset %"
+      "Handling partition pack of size %" G_GSIZE_FORMAT " at offset %"
       G_GUINT64_FORMAT, gst_buffer_get_size (buffer), demux->offset);
 
   for (l = demux->partitions; l; l = l->next) {
@@ -474,7 +474,7 @@ gst_mxf_demux_handle_primer_pack (GstMXFDemux * demux, const MXFUL * key,
   gboolean ret;
 
   GST_DEBUG_OBJECT (demux,
-      "Handling primer pack of size %u at offset %"
+      "Handling primer pack of size %" G_GSIZE_FORMAT " at offset %"
       G_GUINT64_FORMAT, gst_buffer_get_size (buffer), demux->offset);
 
   if (G_UNLIKELY (!demux->current_partition)) {
@@ -855,6 +855,14 @@ gst_mxf_demux_update_essence_tracks (GstMXFDemux * demux)
         caps = NULL;
       }
 
+
+      if (etrack->handler
+          && etrack->handler->get_track_wrapping (track) !=
+          MXF_ESSENCE_WRAPPING_FRAME_WRAPPING) {
+        GST_ERROR_OBJECT (demux, "Only frame wrapping currently supported");
+        return GST_FLOW_ERROR;
+      }
+
       etrack->source_package = package;
       etrack->source_track = track;
       continue;
@@ -886,6 +894,7 @@ gst_mxf_demux_update_essence_tracks (GstMXFDemux * demux)
       GST_ERROR_OBJECT (demux, "Failed to update essence track %u", i);
       return GST_FLOW_ERROR;
     }
+
   }
 
   return GST_FLOW_OK;
@@ -1249,7 +1258,7 @@ gst_mxf_demux_handle_metadata (GstMXFDemux * demux, const MXFUL * key,
   type = GST_READ_UINT16_BE (key->u + 13);
 
   GST_DEBUG_OBJECT (demux,
-      "Handling metadata of size %u at offset %"
+      "Handling metadata of size %" G_GSIZE_FORMAT " at offset %"
       G_GUINT64_FORMAT " of type 0x%04x", gst_buffer_get_size (buffer),
       demux->offset, type);
 
@@ -1341,7 +1350,7 @@ gst_mxf_demux_handle_descriptive_metadata (GstMXFDemux * demux,
   type = GST_READ_UINT24_BE (key->u + 13);
 
   GST_DEBUG_OBJECT (demux,
-      "Handling descriptive metadata of size %u at offset %"
+      "Handling descriptive metadata of size %" G_GSIZE_FORMAT " at offset %"
       G_GUINT64_FORMAT " with scheme 0x%02x and type 0x%06x",
       gst_buffer_get_size (buffer), demux->offset, scheme, type);
 
@@ -1420,7 +1429,7 @@ gst_mxf_demux_handle_generic_container_system_item (GstMXFDemux * demux,
     const MXFUL * key, GstBuffer * buffer)
 {
   GST_DEBUG_OBJECT (demux,
-      "Handling generic container system item of size %u"
+      "Handling generic container system item of size %" G_GSIZE_FORMAT
       " at offset %" G_GUINT64_FORMAT, gst_buffer_get_size (buffer),
       demux->offset);
 
@@ -1584,7 +1593,7 @@ gst_mxf_demux_handle_generic_container_essence_element (GstMXFDemux * demux,
   gboolean keyframe = TRUE;
 
   GST_DEBUG_OBJECT (demux,
-      "Handling generic container essence element of size %u"
+      "Handling generic container essence element of size %" G_GSIZE_FORMAT
       " at offset %" G_GUINT64_FORMAT, gst_buffer_get_size (buffer),
       demux->offset);
 
@@ -1795,9 +1804,9 @@ gst_mxf_demux_handle_generic_container_essence_element (GstMXFDemux * demux,
     pad->position += GST_BUFFER_DURATION (outbuf);
 
     GST_DEBUG_OBJECT (demux,
-        "Pushing buffer of size %u for track %u: timestamp %" GST_TIME_FORMAT
-        " duration %" GST_TIME_FORMAT, gst_buffer_get_size (outbuf),
-        pad->material_track->parent.track_id,
+        "Pushing buffer of size %" G_GSIZE_FORMAT " for track %u: timestamp %"
+        GST_TIME_FORMAT " duration %" GST_TIME_FORMAT,
+        gst_buffer_get_size (outbuf), pad->material_track->parent.track_id,
         GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (outbuf)),
         GST_TIME_ARGS (GST_BUFFER_DURATION (outbuf)));
 
@@ -1879,7 +1888,7 @@ gst_mxf_demux_handle_random_index_pack (GstMXFDemux * demux, const MXFUL * key,
   gboolean ret;
 
   GST_DEBUG_OBJECT (demux,
-      "Handling random index pack of size %u at offset %"
+      "Handling random index pack of size %" G_GSIZE_FORMAT " at offset %"
       G_GUINT64_FORMAT, gst_buffer_get_size (buffer), demux->offset);
 
   if (demux->random_index_pack) {
@@ -1951,7 +1960,7 @@ gst_mxf_demux_handle_index_table_segment (GstMXFDemux * demux,
   gboolean ret;
 
   GST_DEBUG_OBJECT (demux,
-      "Handling index table segment of size %u at offset %"
+      "Handling index table segment of size %" G_GSIZE_FORMAT " at offset %"
       G_GUINT64_FORMAT, gst_buffer_get_size (buffer), demux->offset);
 
   if (!demux->current_partition->primer.mappings) {
@@ -1987,6 +1996,9 @@ gst_mxf_demux_pull_klv_packet (GstMXFDemux * demux, guint64 offset, MXFUL * key,
   guint64 length;
   GstFlowReturn ret = GST_FLOW_OK;
   GstMapInfo map;
+#ifndef GST_DISABLE_GST_DEBUG
+  gchar str[48];
+#endif
 
   memset (key, 0, sizeof (MXFUL));
 
@@ -1998,6 +2010,9 @@ gst_mxf_demux_pull_klv_packet (GstMXFDemux * demux, guint64 offset, MXFUL * key,
   gst_buffer_map (buffer, &map, GST_MAP_READ);
 
   memcpy (key, map.data, 16);
+
+  GST_DEBUG_OBJECT (demux, "Got KLV packet with key %s", mxf_ul_to_string (key,
+          str));
 
   /* Decode BER encoded packet length */
   if ((map.data[16] & 0x80) == 0) {
@@ -2047,6 +2062,9 @@ gst_mxf_demux_pull_klv_packet (GstMXFDemux * demux, guint64 offset, MXFUL * key,
     ret = GST_FLOW_ERROR;
     goto beach;
   }
+
+  GST_DEBUG_OBJECT (demux, "KLV packet with key %s has length "
+      "%" G_GUINT64_FORMAT, mxf_ul_to_string (key, str), length);
 
   /* Pull the complete KLV packet */
   if ((ret = gst_mxf_demux_pull_range (demux, offset + data_offset, length,
@@ -2335,7 +2353,7 @@ gst_mxf_demux_handle_klv_packet (GstMXFDemux * demux, const MXFUL * key,
 
   if (!mxf_is_mxf_packet (key)) {
     GST_WARNING_OBJECT (demux,
-        "Skipping non-MXF packet of size %u at offset %"
+        "Skipping non-MXF packet of size %" G_GSIZE_FORMAT " at offset %"
         G_GUINT64_FORMAT ", key: %s", gst_buffer_get_size (buffer),
         demux->offset, mxf_ul_to_string (key, key_str));
   } else if (mxf_is_partition_pack (key)) {
@@ -2379,11 +2397,11 @@ gst_mxf_demux_handle_klv_packet (GstMXFDemux * demux, const MXFUL * key,
     ret = gst_mxf_demux_handle_index_table_segment (demux, key, buffer);
   } else if (mxf_is_fill (key)) {
     GST_DEBUG_OBJECT (demux,
-        "Skipping filler packet of size %u at offset %"
+        "Skipping filler packet of size %" G_GSIZE_FORMAT " at offset %"
         G_GUINT64_FORMAT, gst_buffer_get_size (buffer), demux->offset);
   } else {
     GST_DEBUG_OBJECT (demux,
-        "Skipping unknown packet of size %u at offset %"
+        "Skipping unknown packet of size %" G_GSIZE_FORMAT " at offset %"
         G_GUINT64_FORMAT ", key: %s", gst_buffer_get_size (buffer),
         demux->offset, mxf_ul_to_string (key, key_str));
   }
@@ -2887,10 +2905,14 @@ gst_mxf_demux_chain (GstPad * pad, GstObject * parent, GstBuffer * inbuf)
   guint64 offset = 0;
   GstBuffer *buffer = NULL;
   gboolean res;
+#ifndef GST_DISABLE_GST_DEBUG
+  gchar str[48];
+#endif
 
   demux = GST_MXF_DEMUX (parent);
 
-  GST_LOG_OBJECT (demux, "received buffer of %u bytes at offset %"
+  GST_LOG_OBJECT (demux,
+      "received buffer of %" G_GSIZE_FORMAT " bytes at offset %"
       G_GUINT64_FORMAT, gst_buffer_get_size (inbuf), GST_BUFFER_OFFSET (inbuf));
 
   if (demux->src->len > 0) {
@@ -2981,6 +3003,9 @@ gst_mxf_demux_chain (GstPad * pad, GstObject * parent, GstBuffer * inbuf)
 
     memcpy (&key, data, 16);
 
+    GST_DEBUG_OBJECT (demux, "Got KLV packet with key %s",
+        mxf_ul_to_string (&key, str));
+
     /* Decode BER encoded packet length */
     if ((data[16] & 0x80) == 0) {
       length = data[16];
@@ -3024,6 +3049,9 @@ gst_mxf_demux_chain (GstPad * pad, GstObject * parent, GstBuffer * inbuf)
       ret = GST_FLOW_ERROR;
       break;
     }
+
+    GST_DEBUG_OBJECT (demux, "KLV packet with key %s has length "
+        "%" G_GUINT64_FORMAT, mxf_ul_to_string (&key, str), length);
 
     if (gst_adapter_available (demux->adapter) < offset + length)
       break;

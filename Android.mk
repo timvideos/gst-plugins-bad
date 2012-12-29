@@ -32,7 +32,6 @@ GST_PLUGINS_BAD_BUILT_SOURCES := \
 	gst/tta/Android.mk \
 	gst/videosignal/Android.mk \
 	gst/coloreffects/Android.mk \
-	gst/scaletempo/Android.mk \
 	gst/jpegformat/Android.mk \
 	gst/freeze/Android.mk \
 	gst/geometrictransform/Android.mk \
@@ -57,7 +56,6 @@ GST_PLUGINS_BAD_BUILT_SOURCES := \
 	gst/sdi/Android.mk \
 	gst/festival/Android.mk \
 	gst/y4m/Android.mk \
-	gst/rtpmux/Android.mk \
 	gst/pcapparse/Android.mk \
 	gst/nuvdemux/Android.mk \
 	gst/colorspace/Android.mk \
@@ -125,7 +123,6 @@ CONFIGURE_TARGETS += gst-plugins-bad-configure
 -include $(GST_PLUGINS_BAD_TOP)/gst/tta/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/videosignal/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/coloreffects/Android.mk
--include $(GST_PLUGINS_BAD_TOP)/gst/scaletempo/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/jpegformat/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/freeze/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/geometrictransform/Android.mk
@@ -150,7 +147,6 @@ CONFIGURE_TARGETS += gst-plugins-bad-configure
 -include $(GST_PLUGINS_BAD_TOP)/gst/sdi/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/festival/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/y4m/Android.mk
--include $(GST_PLUGINS_BAD_TOP)/gst/rtpmux/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/pcapparse/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/nuvdemux/Android.mk
 -include $(GST_PLUGINS_BAD_TOP)/gst/colorspace/Android.mk

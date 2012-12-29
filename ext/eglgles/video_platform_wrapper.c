@@ -55,10 +55,6 @@
 #include <gst/gst.h>
 #include "video_platform_wrapper.h"
 
-#ifndef __BIONIC__
-#include <X11/Xlib.h>
-#endif
-
 GST_DEBUG_CATEGORY_STATIC (eglgles_platform_wrapper);
 #define GST_CAT_DEFAULT eglgles_platform_wrapper
 
@@ -67,23 +63,30 @@ gboolean
 platform_wrapper_init (void)
 {
   GST_DEBUG_CATEGORY_INIT (eglgles_platform_wrapper,
-      "EglGles Platform Wrapper", 0,
+      "eglglessink-platform", 0,
       "Platform dependent native-window utility routines for EglGles");
   return TRUE;
 }
 
-#ifndef __BIONIC__
+#ifdef USE_EGL_X11
+#include <X11/Xlib.h>
+
+typedef struct
+{
+  Display *display;
+} X11WindowData;
+
 EGLNativeWindowType
-platform_create_native_window (gint width, gint height)
+platform_create_native_window (gint width, gint height, gpointer * window_data)
 {
   Display *d;
   Window w;
-  //XEvent e;
   int s;
+  X11WindowData *data;
 
   d = XOpenDisplay (NULL);
   if (d == NULL) {
-    GST_CAT_ERROR (GST_CAT_DEFAULT, "Can't open X11 display");
+    GST_ERROR ("Can't open X11 display");
     return (EGLNativeWindowType) 0;
   }
 
@@ -93,49 +96,68 @@ platform_create_native_window (gint width, gint height)
   XStoreName (d, w, "eglglessink");
   XMapWindow (d, w);
   XFlush (d);
+
+  *window_data = data = g_slice_new0 (X11WindowData);
+  data->display = d;
+
   return (EGLNativeWindowType) w;
 }
 
 gboolean
 platform_destroy_native_window (EGLNativeDisplayType display,
-    EGLNativeWindowType window)
+    EGLNativeWindowType window, gpointer * window_data)
 {
+  X11WindowData *data = *window_data;
+
   /* XXX: Should proly catch BadWindow */
-  XDestroyWindow (display, window);
+  XDestroyWindow (data->display, (Window) window);
+  XSync (data->display, FALSE);
+  XCloseDisplay (data->display);
+
+  g_slice_free (X11WindowData, data);
+  *window_data = NULL;
   return TRUE;
 }
+#endif
 
-/* XXX: Missing implementation */
-EGLint *
-platform_crate_native_image_buffer (EGLNativeWindowType win, EGLConfig config,
-    EGLNativeDisplayType display, const EGLint * egl_attribs)
+#ifdef USE_EGL_MALI_FB
+#include <EGL/fbdev_window.h>
+
+EGLNativeWindowType
+platform_create_native_window (gint width, gint height, gpointer * window_data)
 {
-  return NULL;
+  fbdev_window *w = g_slice_new0 (fbdev_window);
+
+  w->width = width;
+  w->height = height;
+
+  return (EGLNativeWindowType) w;
 }
 
-#else
-/* Android does not support the creation of an egl window surface
- * from native code. Hence, we just return NULL here for the time
- * being. Function is left for reference as implementing it should
- * help us suport other EGL platforms.
- */
-EGLNativeWindowType
-platform_create_native_window (gint width, gint height)
+gboolean
+platform_destroy_native_window (EGLNativeDisplayType display,
+    EGLNativeWindowType window, gpointer * window_data)
 {
-  /* XXX: There was one example on AOSP that was using something
-   * along the lines of window = android_createDisplaySurface();
-   * but wasn't working properly.
-   */
+  g_slice_free (fbdev_window, ((fbdev_window *) window));
 
-  GST_CAT_ERROR (GST_CAT_DEFAULT, "Android: Can't create native window");
+  return TRUE;
+}
+#endif
+
+#if !defined(USE_EGL_X11) && !defined(USE_EGL_MALI_FB)
+/* Dummy functions for creating a native Window */
+EGLNativeWindowType
+platform_create_native_window (gint width, gint height, gpointer * window_data)
+{
+  GST_ERROR ("Can't create native window");
   return (EGLNativeWindowType) 0;
 }
 
 gboolean
 platform_destroy_native_window (EGLNativeDisplayType display,
-    EGLNativeWindowType window)
+    EGLNativeWindowType window, gpointer * window_data)
 {
-  GST_CAT_ERROR (GST_CAT_DEFAULT, "Android: Can't destroy native window");
+  GST_ERROR ("Can't destroy native window");
   return TRUE;
 }
 

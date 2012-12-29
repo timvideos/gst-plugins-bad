@@ -394,7 +394,7 @@ gst_dirac_parse_get_sink_caps (GstBaseParse * parse, GstCaps * filter)
   GstCaps *res;
 
   templ = gst_pad_get_pad_template_caps (GST_BASE_PARSE_SINK_PAD (parse));
-  peercaps = gst_pad_get_allowed_caps (GST_BASE_PARSE_SRC_PAD (parse));
+  peercaps = gst_pad_peer_query_caps (GST_BASE_PARSE_SRC_PAD (parse), filter);
 
   if (peercaps) {
     guint i, n;
@@ -409,6 +409,7 @@ gst_dirac_parse_get_sink_caps (GstBaseParse * parse, GstCaps * filter)
 
     res = gst_caps_intersect_full (peercaps, templ, GST_CAPS_INTERSECT_FIRST);
     gst_caps_unref (peercaps);
+    res = gst_caps_make_writable (res);
 
     /* Append the template caps because we still want to accept
      * caps without any fields in the case upstream does not

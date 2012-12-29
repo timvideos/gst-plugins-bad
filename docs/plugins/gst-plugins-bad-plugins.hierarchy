@@ -85,7 +85,6 @@ GObject
           GstDtmfDetect
           GstRGB2Bayer
           GstRemoveSilence
-          GstScaletempo
           GstVideoFilter
             GstBurn
             GstChromaHold
@@ -209,8 +208,6 @@ GObject
           GstRtpAsfPay
           GstRtpOPUSPay
           GstRtpVP8Pay
-        GstRTPMux
-          GstRTPDTMFMux
         GstRawParse
           GstAudioParse
           GstVideoParse

@@ -124,8 +124,10 @@ struct _GstEglGlesRenderContext
   EGLNativeWindowType window, used_window;
   EGLSurface surface;
   gboolean buffer_preserved;
-  GLuint fragshader[2], vertshader[2], glslprogram[2];
-  GLuint texture[3];
+  GLuint fragshader[3]; /* frame, border, frame-platform */
+  GLuint vertshader[3]; /* frame, border, frame-platform */
+  GLuint glslprogram[3]; /* frame, border, frame-platform */
+  GLuint texture[3]; /* RGB/Y, U/UV, V */
   EGLint surface_width;
   EGLint surface_height;
   EGLint pixel_aspect_ratio;
@@ -133,9 +135,11 @@ struct _GstEglGlesRenderContext
   gint n_textures;
 
   /* shader vars */
-  GLuint position_loc[2], texpos_loc;
-  GLuint tex_loc[3];
-  coord5 position_array[12];    /* 3 x Frame, 3 x Border1, 3 x Border2 */
+  GLuint position_loc[3]; /* frame, border, frame-platform */
+  GLuint texpos_loc[2]; /* frame, frame-platform */
+  GLuint tex_scale_loc[2][3]; /* [frame, frame-platform] RGB/Y, U/UV, V */
+  GLuint tex_loc[2][3]; /* [frame, frame-platform] RGB/Y, U/UV, V */
+  coord5 position_array[12];    /* 4 x Frame, 4 x Border1, 4 x Border2 */
   unsigned short index_array[4];
   unsigned int position_buffer, index_buffer;
 };
@@ -183,13 +187,20 @@ struct _GstEglGlesSink
 {
   GstVideoSink videosink;       /* Element hook */
 
+  /* Region of the surface that should be rendered */
+  GstVideoRectangle render_region;
+  gboolean render_region_changed;
+  gboolean render_region_user;
+
+  /* Region of render_region that should be filled
+   * with the video frames */
   GstVideoRectangle display_region;
-  struct {
-    gint x, y, width, height;
-  } crop;
+
+  GstVideoRectangle crop;
   GstCaps *sinkcaps;
   GstCaps *current_caps, *configured_caps;
   GstVideoInfo configured_info;
+  gfloat stride[3];
 
   GstEglGlesImageFmt *selected_fmt;
   GstEglGlesRenderContext eglglesctx;
@@ -203,6 +214,8 @@ struct _GstEglGlesSink
   gboolean have_vbo;
   gboolean have_texture;
   gboolean egl_started;
+
+  gpointer own_window_data;
 
   GThread *thread;
   gboolean thread_running;

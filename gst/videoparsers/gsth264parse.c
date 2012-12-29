@@ -1196,12 +1196,24 @@ gst_h264_parse_update_src_caps (GstH264Parse * h264parse, GstCaps * caps)
     if (G_UNLIKELY (modified)) {
       gint fps_num = h264parse->fps_num;
       gint fps_den = h264parse->fps_den;
+      gint width, height;
       GstClockTime latency;
 
       caps = gst_caps_copy (sink_caps);
-      /* sps should give this */
-      gst_caps_set_simple (caps, "width", G_TYPE_INT, sps->width,
-          "height", G_TYPE_INT, sps->height, NULL);
+
+      /* sps should give this but upstream overrides */
+      if (s && gst_structure_has_field (s, "width"))
+        gst_structure_get_int (s, "width", &width);
+      else
+        width = sps->width;
+
+      if (s && gst_structure_has_field (s, "height"))
+        gst_structure_get_int (s, "height", &height);
+      else
+        height = sps->height;
+
+      gst_caps_set_simple (caps, "width", G_TYPE_INT, width,
+          "height", G_TYPE_INT, height, NULL);
 
       /* upstream overrides */
       if (s && gst_structure_has_field (s, "framerate"))
@@ -1864,7 +1876,7 @@ gst_h264_parse_get_caps (GstBaseParse * parse, GstCaps * filter)
   GstCaps *res;
 
   templ = gst_pad_get_pad_template_caps (GST_BASE_PARSE_SINK_PAD (parse));
-  peercaps = gst_pad_get_allowed_caps (GST_BASE_PARSE_SRC_PAD (parse));
+  peercaps = gst_pad_peer_query_caps (GST_BASE_PARSE_SRC_PAD (parse), filter);
   if (peercaps) {
     guint i, n;
 
@@ -1879,6 +1891,7 @@ gst_h264_parse_get_caps (GstBaseParse * parse, GstCaps * filter)
 
     res = gst_caps_intersect_full (peercaps, templ, GST_CAPS_INTERSECT_FIRST);
     gst_caps_unref (peercaps);
+    res = gst_caps_make_writable (res);
 
     /* Append the template caps because we still want to accept
      * caps without any fields in the case upstream does not
