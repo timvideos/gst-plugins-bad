@@ -1,5 +1,6 @@
-/* GStreamer Jasper based j2k image decoder/encoder
- * Copyright (C) 2008 Mark Nauwelaerts <mnauw@users.sf.net>
+/*
+ * Copyright (C) 2012 Collabora Ltd.
+ *     Author: Sebastian Dröge <sebastian.droege@collabora.co.uk>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,34 +22,36 @@
 #include "config.h"
 #endif
 
-#include "gstjasperdec.h"
-#include "gstjasperenc.h"
+#include <gst/gst.h>
+#include "gstmfcdec.h"
 
-/* entry point to initialize the plug-in
- * initialize the plug-in itself
- * register the element factories and pad templates
- * register the features
- */
+GST_DEBUG_CATEGORY_EXTERN (GST_CAT_PLUGIN_LOADING);
+
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
-  if (!gst_element_register (plugin, "jasperdec", GST_RANK_MARGINAL,
-          GST_TYPE_JASPER_DEC))
+  struct mfc_dec_context *context;
+
+  /* Just check here once if we can create a MFC context, i.e.
+   * if the hardware is available */
+  mfc_dec_init_debug ();
+  context = mfc_dec_create (CODEC_TYPE_H264);
+  if (!context) {
+    GST_CAT_DEBUG (GST_CAT_PLUGIN_LOADING,
+        "Failed to initialize MFC decoder context");
+    return FALSE;
+  }
+  mfc_dec_destroy (context);
+
+  if (!gst_element_register (plugin, "mfcdec", GST_RANK_PRIMARY,
+          GST_TYPE_MFC_DEC))
     return FALSE;
 
-  if (!gst_element_register (plugin, "jasperenc", GST_RANK_MARGINAL,
-          GST_TYPE_JASPER_ENC))
-    return FALSE;
-
-  /* plugin initialisation succeeded */
   return TRUE;
 }
 
-
-/* this is the structure that gst-register looks for
- * so keep the name plugin_desc, or you cannot get your plug-in registered */
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    jasper,
-    "Jasper-based JPEG2000 image decoder/encoder",
+    mfc,
+    "Samsung Exynos MFC plugin",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

@@ -20,7 +20,7 @@ dnl can autoconf find the source ?
 AC_CONFIG_SRCDIR([docs/plugins/gst-plugins-bad-plugins-docs.sgml])
 
 dnl define the output header for config
-AM_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 
 dnl AM_MAINTAINER_MODE only provides the option to configure to enable it
 AM_MAINTAINER_MODE([enable])
@@ -315,13 +315,13 @@ GST_PLUGINS_NONPORTED=" aiff \
  freeverb \
  hdvparse ivfparse jp2kdecimator \
  kate librfb \
- mpegpsmux mve mythtv nsf nuvdemux \
+ mve mythtv nsf nuvdemux \
  patchdetect real \
  sdi stereo tta videofilters \
  videomeasure videosignal vmnc \
  decklink fbdev linsys vcd \
  apexsink cdaudio cog dc1394 dirac directfb \
- gsettings jasper ladspa \
+ gsettings ladspa \
  musepack musicbrainz nas neon ofa openal rsvg sdl sndfile timidity \
  directdraw direct3d9 acm wininet \
  wildmidi xvid lv2 teletextdec sndio uvch264 wasapi"
@@ -753,6 +753,52 @@ AG_GST_CHECK_FEATURE(SHM, [POSIX shared memory source and sink], shm, [
     fi
 ])
 
+dnl *** Video 4 Linux 2 ***
+dnl for information about the header/define, see sys/v4l2/gstv4l2element.h
+dnl renamed to GST_V4L2 because of some conflict with kernel headers
+translit(dnm, m, l) AM_CONDITIONAL(USE_MFC, true)
+AG_GST_CHECK_FEATURE(MFC, [Multi Format Codec], mfc, [
+  AC_MSG_CHECKING([Checking for up to date v4l2 installation])
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <sys/types.h>
+#ifdef __sun /* Solaris */
+#include <sys/types.h>
+#include <sys/videodev2.h>
+#elif __FreeBSD__
+#include <linux/videodev2.h>
+#else /* Linux */
+#include <linux/types.h>
+#define _LINUX_TIME_H
+#define __user
+#include <linux/videodev2.h>
+#endif
+#if defined(V4L2_MAJOR_VERSION) || defined(V4L2_MINOR_VERSION)
+#error too early v4l2 version or no v4l2 at all
+#endif
+    ]], [[
+return 0;
+    ]])],[
+      HAVE_MFC="yes"
+      AC_MSG_RESULT(yes)
+    ],[
+      HAVE_MFC="no"
+      AC_MSG_RESULT(no)
+
+      HAVE_VIDEODEV=no
+      AC_CHECK_HEADER(linux/videodev2.h, [ HAVE_VIDEODEV=yes ],
+      [
+        AC_CHECK_HEADER(sys/videodev2.h, [ HAVE_VIDEODEV=yes ])
+      ])
+
+      if test "x$HAVE_VIDEODEV" = "xyes"; then
+        AC_MSG_WARN([video4linux2 headers were found, but they're old.])
+        AC_MSG_WARN([Please update v4l2 to compile the MFC plugins])
+      else
+        AC_MSG_WARN([v4l2 was not found])
+      fi
+    ])
+])
+
 dnl check for Video CD
 translit(dnm, m, l) AM_CONDITIONAL(USE_VCD, true)
 AG_GST_CHECK_FEATURE(VCD, [Video CD], vcdsrc, [
@@ -1135,26 +1181,6 @@ AG_GST_CHECK_FEATURE(GSM, [GSM library], gsmenc gsmdec, [
   AC_SUBST(GSM_LIBS)
 ])
 
-dnl *** jasper ***
-translit(dnm, m, l) AM_CONDITIONAL(USE_JASPER, true)
-AG_GST_CHECK_FEATURE(JASPER, [jasper], jasperdec jasperenc, [
-  AG_GST_CHECK_LIBHEADER(JASPER, jasper, jas_stream_fopen, , jasper/jasper.h,
-    JASPER_LIBS="-ljasper")
-  AC_SUBST(JASPER_LIBS)
-])
-
-dnl *** OpenJPEG ***
-translit(dnm, m, l) AM_CONDITIONAL(USE_OPENJPEG, true)
-AG_GST_CHECK_FEATURE(OPENJPEG, [openjpeg library], openjpeg, [
-  HAVE_OPENJPEG="no"
-  PKG_CHECK_MODULES(OPENJPEG, libopenjpeg1,
-    HAVE_OPENJPEG="yes",
-    AG_GST_CHECK_LIBHEADER(OPENJPEG, openjpeg, opj_version, , openjpeg.h, OPENJPEG_LIBS="-lopenjpeg")
-  )
-  AC_SUBST(OPENJPEG_CFLAGS)
-  AC_SUBST(OPENJPEG_LIBS)
-])
-
 dnl *** kate ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_KATE, true)
 AG_GST_CHECK_FEATURE(KATE, [Kate], kate, [
@@ -1519,7 +1545,7 @@ AG_GST_CHECK_FEATURE(OPENCV, [opencv plugins], opencv, [
   dnl a new version and the no-backward-compatibility define. (There doesn't
   dnl seem to be a switch to suppress the warnings the cvcompat.h header
   dnl causes.)
-  PKG_CHECK_MODULES(OPENCV, opencv >= 2.0.0 opencv <= 2.4.2 , [
+  PKG_CHECK_MODULES(OPENCV, opencv >= 2.0.0 opencv <= 2.4.3 , [
     AC_PROG_CXX
     AC_LANG([C++])
     OLD_CPPFLAGS=$CPPFLAGS
@@ -1542,6 +1568,18 @@ AG_GST_CHECK_FEATURE(OPENCV, [opencv plugins], opencv, [
   AC_SUBST(OPENCV_PREFIX)
   AC_SUBST(OPENCV_CFLAGS)
   AC_SUBST(OPENCV_LIBS)
+])
+
+dnl *** OpenJPEG ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_OPENJPEG, true)
+AG_GST_CHECK_FEATURE(OPENJPEG, [openjpeg library], openjpeg, [
+  HAVE_OPENJPEG="no"
+  PKG_CHECK_MODULES(OPENJPEG, libopenjpeg1,
+    HAVE_OPENJPEG="yes",
+    AG_GST_CHECK_LIBHEADER(OPENJPEG, openjpeg, opj_version, , openjpeg.h, OPENJPEG_LIBS="-lopenjpeg")
+  )
+  AC_SUBST(OPENJPEG_CFLAGS)
+  AC_SUBST(OPENJPEG_LIBS)
 ])
 
 dnl *** Opus ***
@@ -2012,8 +2050,6 @@ AM_CONDITIONAL(USE_FAAD, false)
 AM_CONDITIONAL(USE_FBDEV, false)
 AM_CONDITIONAL(USE_FLITE, false)
 AM_CONDITIONAL(USE_GSM, false)
-AM_CONDITIONAL(USE_JASPER, false)
-AM_CONDITIONAL(USE_OPENJPEG, false)
 AM_CONDITIONAL(USE_KATE, false)
 AM_CONDITIONAL(USE_TIGER, false)
 AM_CONDITIONAL(USE_LADSPA, false)
@@ -2033,6 +2069,7 @@ AM_CONDITIONAL(USE_NEON, false)
 AM_CONDITIONAL(USE_OFA, false)
 AM_CONDITIONAL(USE_OPENAL, false)
 AM_CONDITIONAL(USE_OPENCV, false)
+AM_CONDITIONAL(USE_OPENJPEG, false)
 AM_CONDITIONAL(USE_OPUS, false)
 AM_CONDITIONAL(USE_PVR, false)
 AM_CONDITIONAL(USE_RSVG, false)
@@ -2230,6 +2267,7 @@ sys/linsys/Makefile
 sys/opensles/Makefile
 sys/osxvideo/Makefile
 sys/qtwrapper/Makefile
+sys/mfc/Makefile
 sys/shm/Makefile
 sys/uvch264/Makefile
 sys/vcd/Makefile
@@ -2272,7 +2310,6 @@ ext/faac/Makefile
 ext/faad/Makefile
 ext/flite/Makefile
 ext/gsm/Makefile
-ext/jasper/Makefile
 ext/kate/Makefile
 ext/ladspa/Makefile
 ext/lv2/Makefile
