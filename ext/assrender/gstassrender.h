@@ -22,6 +22,7 @@
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
+#include <gst/video/video-overlay-composition.h>
 
 #include <ass/ass.h>
 #include <ass/ass_types.h>
@@ -43,7 +44,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstAssRender GstAssRender;
 typedef struct _GstAssRenderClass GstAssRenderClass;
-typedef void (*GstAssRenderBlitFunction) (GstAssRender *render, ASS_Image *ass_image, GstVideoFrame *frame);
 
 struct _GstAssRender
 {
@@ -53,6 +53,7 @@ struct _GstAssRender
 
   /* properties */
   gboolean enable, embeddedfonts;
+  gboolean wait_text;
 
   /* <private> */
   GMutex lock;
@@ -63,7 +64,6 @@ struct _GstAssRender
   gboolean video_eos;
 
   GstVideoInfo info;
-  GstAssRenderBlitFunction blit;
 
   GstBuffer *subtitle_pending;
   gboolean subtitle_flushing;
@@ -76,6 +76,12 @@ struct _GstAssRender
   ASS_Track *ass_track;
 
   gboolean renderer_init_ok, track_init_ok;
+  gboolean need_process;
+
+  /* overlay stuff */
+  GstVideoOverlayComposition *composition;
+  gint width, height;
+  gboolean attach_compo_to_buffer;
 };
 
 struct _GstAssRenderClass

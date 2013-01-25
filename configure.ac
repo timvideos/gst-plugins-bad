@@ -89,6 +89,8 @@ AG_GST_ARG_ENABLE_EXTERNAL
 
 AG_GST_ARG_ENABLE_EXPERIMENTAL
 
+AG_GST_PKG_CONFIG_PATH
+
 dnl *** checks for platform ***
 AG_GST_PLATFORM
 
@@ -122,6 +124,9 @@ AG_GST_CHECK_DOWHILE_MACROS
 
 AC_PATH_PROG(VALGRIND_PATH, valgrind, no)
 AM_CONDITIONAL(HAVE_VALGRIND, test ! "x$VALGRIND_PATH" = "xno")
+
+dnl check for gobject-introspection
+GOBJECT_INTROSPECTION_CHECK([1.31.1])
 
 dnl check for documentation tools
 GTK_DOC_CHECK([1.12])
@@ -684,6 +689,16 @@ if test "x$HAVE_IOS" = "xyes"; then
   AC_DEFINE(HAVE_IOS, 1, [Define if building for Apple iOS])
 fi
 
+dnl *** bluez ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_BLUEZ, true)
+AG_GST_CHECK_FEATURE(BLUEZ, [Bluez], bluez, [
+  dnl FIXME: we should be able to replace this with the GLib DBus stuff
+  PKG_CHECK_MODULES([DBUS], [dbus-1], [HAVE_BLUEZ=yes], [HAVE_BLUEZ=no])
+
+  AC_MSG_NOTICE([Disabling bluez plugin for now, does not work yet])
+  HAVE_BLUEZ=no
+])
+
 dnl *** OS X videosrc ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_OSX_VIDEO, true)
 HAVE_OSX_VIDEO="no"
@@ -774,6 +789,9 @@ AG_GST_CHECK_FEATURE(MFC, [Multi Format Codec], mfc, [
 #endif
 #if defined(V4L2_MAJOR_VERSION) || defined(V4L2_MINOR_VERSION)
 #error too early v4l2 version or no v4l2 at all
+#endif
+#if !defined(V4L2_PIX_FMT_H264)
+#error v4l2 version too old
 #endif
     ]], [[
 return 0;
@@ -2244,6 +2262,7 @@ gst/y4m/Makefile
 gst-libs/Makefile
 gst-libs/gst/Makefile
 gst-libs/gst/basecamerabinsrc/Makefile
+gst-libs/gst/insertbin/Makefile
 gst-libs/gst/interfaces/Makefile
 gst-libs/gst/signalprocessor/Makefile
 gst-libs/gst/codecparsers/Makefile
@@ -2255,6 +2274,7 @@ sys/acmmp3dec/Makefile
 sys/androidmedia/Makefile
 sys/applemedia/Makefile
 sys/avc/Makefile
+sys/bluez/Makefile
 sys/d3dvideosink/Makefile
 sys/decklink/Makefile
 sys/directdraw/Makefile
@@ -2359,6 +2379,8 @@ pkgconfig/gstreamer-plugins-bad.pc
 pkgconfig/gstreamer-plugins-bad-uninstalled.pc
 pkgconfig/gstreamer-codecparsers.pc
 pkgconfig/gstreamer-codecparsers-uninstalled.pc
+pkgconfig/gstreamer-insertbin.pc
+pkgconfig/gstreamer-insertbin-uninstalled.pc
 pkgconfig/gstreamer-basevideo.pc
 pkgconfig/gstreamer-basevideo-uninstalled.pc
 tools/Makefile

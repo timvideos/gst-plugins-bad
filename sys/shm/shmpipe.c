@@ -235,6 +235,10 @@ sp_writer_create (const char *path, size_t size, mode_t perms)
 
   self->socket_path = strdup (sock_un.sun_path);
 
+  if (chmod (self->socket_path, perms) < 0)
+    RETURN_ERROR ("failed to set socket permissions (%d): %s\n", errno,
+        strerror (errno));
+
   if (listen (self->main_socket, LISTEN_BACKLOG) < 0)
     RETURN_ERROR ("listen() failed (%d): %s\n", errno, strerror (errno));
 
@@ -276,6 +280,7 @@ sp_open_shm (char *path, int id, mode_t perms, size_t size)
 
   memset (area, 0, sizeof (ShmArea));
 
+  area->shm_area_buf = MAP_FAILED;
   area->use_count = 1;
 
   area->shm_area_len = size;
@@ -444,6 +449,8 @@ sp_writer_setperms_shm (ShmPipe * self, mode_t perms)
   self->perms = perms;
   for (area = self->shm_area; area; area = area->next)
     ret |= fchmod (area->shm_fd, perms);
+
+  ret |= chmod (self->socket_path, perms);
 
   return ret;
 }

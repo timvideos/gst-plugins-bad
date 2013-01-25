@@ -435,7 +435,7 @@ bitplane_decoding (GstBitReader * br, guint8 * data,
   const guint height = seqhdr->mb_height;
   const guint stride = seqhdr->mb_stride;
   guint imode, invert, invert_mask;
-  guint x, y, v;
+  guint x, y, v, o;
   guint8 *pdata = data;
 
   *is_raw = FALSE;
@@ -464,7 +464,8 @@ bitplane_decoding (GstBitReader * br, guint8 * data,
       GST_DEBUG ("Parsing IMODE_DIFF2 or IMODE_NORM2 biplane");
 
       x = 0;
-      if ((height * width) & 1) {
+      o = (height * width) & 1;
+      if (o) {
         GET_BITS (br, 1, &v);
         if (pdata) {
           *pdata++ = (v ^ invert_mask) & 1;
@@ -475,7 +476,7 @@ bitplane_decoding (GstBitReader * br, guint8 * data,
         }
       }
 
-      for (y = 0; y < height * width; y += 2) {
+      for (y = o; y < height * width; y += 2) {
         if (!decode_vlc (br, &v, vc1_norm2_vlc_table,
                 G_N_ELEMENTS (vc1_norm2_vlc_table)))
           goto failed;
@@ -528,7 +529,7 @@ bitplane_decoding (GstBitReader * br, guint8 * data,
       } else {                  /* decode 3x2 "horizontal" tiles */
 
         if (pdata)
-          pdata += (height & 1) * width;
+          pdata += (height & 1) * stride;
         for (y = height & 1; y < height; y += 2) {
           for (x = width % 3; x < width; x += 3) {
             if (!decode_vlc (br, &v, vc1_norm6_vlc_table,
@@ -555,7 +556,7 @@ bitplane_decoding (GstBitReader * br, guint8 * data,
 
       if (x) {
         if (data)
-          pdata = data + y * stride;
+          pdata = data;
         if (!decode_colskip (br, pdata, x, height, stride, invert_mask))
           goto failed;
       }
@@ -563,7 +564,7 @@ bitplane_decoding (GstBitReader * br, guint8 * data,
       if (y) {
         if (data)
           pdata = data + x;
-        if (!decode_rowskip (br, pdata, width, y, stride, invert_mask))
+        if (!decode_rowskip (br, pdata, width - x, y, stride, invert_mask))
           goto failed;
       }
       break;
@@ -625,7 +626,7 @@ parse_vopdquant (GstBitReader * br, GstVC1FrameHdr * framehdr, guint8 dquant)
   vopdquant->dqbilevel = 0;
 
   if (dquant == 2) {
-    READ_UINT8 (br, vopdquant->dquantfrm, 1);
+    vopdquant->dquantfrm = 0;
 
     READ_UINT8 (br, vopdquant->pqdiff, 3);
 
@@ -641,12 +642,12 @@ parse_vopdquant (GstBitReader * br, GstVC1FrameHdr * framehdr, guint8 dquant)
         vopdquant->dquantfrm);
 
     if (vopdquant->dquantfrm) {
-      READ_UINT8 (br, vopdquant->dqprofile, 1);
+      READ_UINT8 (br, vopdquant->dqprofile, 2);
 
       switch (vopdquant->dqprofile) {
         case GST_VC1_DQPROFILE_SINGLE_EDGE:
         case GST_VC1_DQPROFILE_DOUBLE_EDGES:
-          READ_UINT8 (br, vopdquant->dqsbedge, 2);
+          READ_UINT8 (br, vopdquant->dqbedge, 2);
           break;
 
         case GST_VC1_DQPROFILE_ALL_MBS:
@@ -659,8 +660,12 @@ parse_vopdquant (GstBitReader * br, GstVC1FrameHdr * framehdr, guint8 dquant)
         {
           READ_UINT8 (br, vopdquant->pqdiff, 3);
 
-          if (vopdquant->pqdiff == 7)
+          if (vopdquant->pqdiff != 7)
+            vopdquant->altpquant = framehdr->pquant + vopdquant->pqdiff + 1;
+          else {
             READ_UINT8 (br, vopdquant->abspq, 5);
+            vopdquant->altpquant = vopdquant->abspq;
+          }
         }
       }
     }
@@ -2045,6 +2050,50 @@ gst_vc1_parse_field_header (const guint8 * data, gsize size,
   result = parse_frame_header_advanced (&br, fieldhdr, seqhdr, bitplanes, TRUE);
 
   return result;
+}
+
+/**
+ * gst_vc1_parse_slice_header:
+ * @data: The data to parse
+ * @size: The size of @data
+ * @slicehdr: The #GstVC1SliceHdr to fill
+ * @seqhdr: The #GstVC1SeqHdr that was previously parsed
+ *
+ * Parses @data, and fills @slicehdr fields.
+ *
+ * Returns: a #GstVC1ParserResult
+ *
+ * Since: 1.2
+ */
+GstVC1ParserResult
+gst_vc1_parse_slice_header (const guint8 * data, gsize size,
+    GstVC1SliceHdr * slicehdr, GstVC1SeqHdr * seqhdr)
+{
+  GstBitReader br;
+  GstVC1FrameHdr framehdr;
+  GstVC1ParserResult result;
+  guint8 pic_header_flag;
+
+  GST_DEBUG ("Parsing slice header");
+
+  if (seqhdr->profile != GST_VC1_PROFILE_ADVANCED)
+    return GST_VC1_PARSER_BROKEN_DATA;
+
+  gst_bit_reader_init (&br, data, size);
+
+  READ_UINT16 (&br, slicehdr->slice_addr, 9);
+  READ_UINT8 (&br, pic_header_flag, 1);
+  if (pic_header_flag)
+    result = parse_frame_header_advanced (&br, &framehdr, seqhdr, NULL, FALSE);
+  else
+    result = GST_VC1_PARSER_OK;
+
+  slicehdr->header_size = gst_bit_reader_get_pos (&br);
+  return result;
+
+failed:
+  GST_WARNING ("Failed to parse slice header");
+  return GST_VC1_PARSER_ERROR;
 }
 
 /**
