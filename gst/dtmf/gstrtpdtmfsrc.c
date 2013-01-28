@@ -170,7 +170,6 @@ GST_STATIC_PAD_TEMPLATE ("src",
         "media = (string) \"audio\", "
         "payload = (int) [ 96, 127 ], "
         "clock-rate = (int) [ 0, MAX ], "
-        "ssrc = (int) [ 0, MAX ], "
         "encoding-name = (string) \"TELEPHONE-EVENT\"")
     /*  "events = (string) \"0-15\" */
     );
@@ -551,7 +550,6 @@ gst_rtp_dtmf_src_add_start_event (GstRTPDTMFSrc * dtmfsrc, gint event_number,
   event->payload = g_slice_new0 (GstRTPDTMFPayload);
   event->payload->event = CLAMP (event_number, MIN_EVENT, MAX_EVENT);
   event->payload->volume = CLAMP (event_volume, MIN_VOLUME, MAX_VOLUME);
-  event->payload->duration = dtmfsrc->ptime * dtmfsrc->clock_rate / 1000;
 
   g_async_queue_push (dtmfsrc->event_queue, event);
 }
@@ -644,12 +642,11 @@ gst_rtp_dtmf_src_create_next_rtp_packet (GstRTPDTMFSrc * dtmfsrc)
   return buf;
 }
 
-
-static void
-gst_dtmf_src_post_message (GstRTPDTMFSrc * dtmfsrc, const gchar * message_name,
-    GstRTPDTMFSrcEvent * event)
+static GstMessage *
+gst_dtmf_src_prepare_message (GstRTPDTMFSrc * dtmfsrc,
+    const gchar * message_name, GstRTPDTMFSrcEvent * event)
 {
-  GstStructure *s = NULL;
+  GstStructure *s;
 
   switch (event->event_type) {
     case RTP_DTMF_EVENT_TYPE_START:
@@ -666,12 +663,23 @@ gst_dtmf_src_post_message (GstRTPDTMFSrc * dtmfsrc, const gchar * message_name,
           "start", G_TYPE_BOOLEAN, FALSE, NULL);
       break;
     case RTP_DTMF_EVENT_TYPE_PAUSE_TASK:
-      return;
+      return NULL;
+    default:
+      return NULL;
   }
 
-  if (s)
-    gst_element_post_message (GST_ELEMENT (dtmfsrc),
-        gst_message_new_element (GST_OBJECT (dtmfsrc), s));
+  return gst_message_new_element (GST_OBJECT (dtmfsrc), s);
+}
+
+static void
+gst_dtmf_src_post_message (GstRTPDTMFSrc * dtmfsrc, const gchar * message_name,
+    GstRTPDTMFSrcEvent * event)
+{
+  GstMessage *m = gst_dtmf_src_prepare_message (dtmfsrc, message_name, event);
+
+
+  if (m)
+    gst_element_post_message (GST_ELEMENT (dtmfsrc), m);
 }
 
 
@@ -684,6 +692,8 @@ gst_rtp_dtmf_src_create (GstBaseSrc * basesrc, guint64 offset,
   GstClock *clock;
   GstClockID *clockid;
   GstClockReturn clockret;
+  GstMessage *message;
+  GQueue messages = G_QUEUE_INIT;
 
   dtmfsrc = GST_RTP_DTMF_SRC (basesrc);
 
@@ -710,8 +720,12 @@ gst_rtp_dtmf_src_create (GstBaseSrc * basesrc, guint64 offset,
           if (!gst_rtp_dtmf_prepare_timestamps (dtmfsrc))
             goto no_clock;
 
-          gst_dtmf_src_post_message (dtmfsrc, "dtmf-event-processed", event);
+          g_queue_push_tail (&messages,
+              gst_dtmf_src_prepare_message (dtmfsrc, "dtmf-event-processed",
+                  event));
           dtmfsrc->payload = event->payload;
+          dtmfsrc->payload->duration =
+              dtmfsrc->ptime * dtmfsrc->clock_rate / 1000;
           event->payload = NULL;
           break;
 
@@ -752,7 +766,9 @@ gst_rtp_dtmf_src_create (GstBaseSrc * basesrc, guint64 offset,
             dtmfsrc->last_packet = TRUE;
             /* Set the redundancy on the last packet */
             dtmfsrc->redundancy_count = dtmfsrc->packet_redundancy;
-            gst_dtmf_src_post_message (dtmfsrc, "dtmf-event-processed", event);
+            g_queue_push_tail (&messages,
+                gst_dtmf_src_prepare_message (dtmfsrc, "dtmf-event-processed",
+                    event));
             break;
 
           case RTP_DTMF_EVENT_TYPE_PAUSE_TASK:
@@ -800,6 +816,9 @@ gst_rtp_dtmf_src_create (GstBaseSrc * basesrc, guint64 offset,
   gst_clock_id_unref (clockid);
   dtmfsrc->clockid = NULL;
   GST_OBJECT_UNLOCK (dtmfsrc);
+
+  while ((message = g_queue_pop_head (&messages)) != NULL)
+    gst_element_post_message (GST_ELEMENT (dtmfsrc), message);
 
   if (clockret == GST_CLOCK_UNSCHEDULED) {
     goto paused;
