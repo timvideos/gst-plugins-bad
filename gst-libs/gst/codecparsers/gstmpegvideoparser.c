@@ -322,7 +322,7 @@ gst_mpeg_video_parse_sequence_header (GstMpegVideoSequenceHdr * seqhdr,
   if (load_intra_flag) {
     gint i;
     for (i = 0; i < 64; i++)
-      READ_UINT8 (&br, seqhdr->intra_quantizer_matrix[mpeg_zigzag_8x8[i]], 8);
+      READ_UINT8 (&br, seqhdr->intra_quantizer_matrix[i], 8);
   } else
     memcpy (seqhdr->intra_quantizer_matrix, default_intra_quantizer_matrix, 64);
 
@@ -331,8 +331,7 @@ gst_mpeg_video_parse_sequence_header (GstMpegVideoSequenceHdr * seqhdr,
   if (load_non_intra_flag) {
     gint i;
     for (i = 0; i < 64; i++)
-      READ_UINT8 (&br, seqhdr->non_intra_quantizer_matrix[mpeg_zigzag_8x8[i]],
-          8);
+      READ_UINT8 (&br, seqhdr->non_intra_quantizer_matrix[i], 8);
   } else
     memset (seqhdr->non_intra_quantizer_matrix, 16, 64);
 
@@ -564,31 +563,28 @@ gst_mpeg_video_parse_quant_matrix_extension (GstMpegVideoQuantMatrixExt * quant,
   READ_UINT8 (&br, quant->load_intra_quantiser_matrix, 1);
   if (quant->load_intra_quantiser_matrix) {
     for (i = 0; i < 64; i++) {
-      READ_UINT8 (&br, quant->intra_quantiser_matrix[mpeg_zigzag_8x8[i]], 8);
+      READ_UINT8 (&br, quant->intra_quantiser_matrix[i], 8);
     }
   }
 
   READ_UINT8 (&br, quant->load_non_intra_quantiser_matrix, 1);
   if (quant->load_non_intra_quantiser_matrix) {
     for (i = 0; i < 64; i++) {
-      READ_UINT8 (&br, quant->non_intra_quantiser_matrix[mpeg_zigzag_8x8[i]],
-          8);
+      READ_UINT8 (&br, quant->non_intra_quantiser_matrix[i], 8);
     }
   }
 
   READ_UINT8 (&br, quant->load_chroma_intra_quantiser_matrix, 1);
   if (quant->load_chroma_intra_quantiser_matrix) {
     for (i = 0; i < 64; i++) {
-      READ_UINT8 (&br, quant->chroma_intra_quantiser_matrix[mpeg_zigzag_8x8[i]],
-          8);
+      READ_UINT8 (&br, quant->chroma_intra_quantiser_matrix[i], 8);
     }
   }
 
   READ_UINT8 (&br, quant->load_chroma_non_intra_quantiser_matrix, 1);
   if (quant->load_chroma_non_intra_quantiser_matrix) {
     for (i = 0; i < 64; i++) {
-      READ_UINT8 (&br,
-          quant->chroma_non_intra_quantiser_matrix[mpeg_zigzag_8x8[i]], 8);
+      READ_UINT8 (&br, quant->chroma_non_intra_quantiser_matrix[i], 8);
     }
   }
 
@@ -822,4 +818,54 @@ gst_mpeg_video_parse_gop (GstMpegVideoGop * gop, const guint8 * data,
 failed:
   GST_WARNING ("error parsing \"GOP\"");
   return FALSE;
+}
+
+/**
+ * gst_mpeg_video_quant_matrix_get_raster_from_zigzag:
+ * @out_quant: (out): The resulting quantization matrix
+ * @quant: The source quantization matrix
+ *
+ * Converts quantization matrix @quant from zigzag scan order to
+ * raster scan order and store the resulting factors into @out_quant.
+ *
+ * Note: it is an error to pass the same table in both @quant and
+ * @out_quant arguments.
+ *
+ * Since: 1.2
+ */
+void
+gst_mpeg_video_quant_matrix_get_raster_from_zigzag (guint8 out_quant[64],
+    const guint8 quant[64])
+{
+  guint i;
+
+  g_return_if_fail (out_quant != quant);
+
+  for (i = 0; i < 64; i++)
+    out_quant[mpeg_zigzag_8x8[i]] = quant[i];
+}
+
+/**
+ * gst_mpeg_video_quant_matrix_get_zigzag_from_raster:
+ * @out_quant: (out): The resulting quantization matrix
+ * @quant: The source quantization matrix
+ *
+ * Converts quantization matrix @quant from raster scan order to
+ * zigzag scan order and store the resulting factors into @out_quant.
+ *
+ * Note: it is an error to pass the same table in both @quant and
+ * @out_quant arguments.
+ *
+ * Since: 1.2
+ */
+void
+gst_mpeg_video_quant_matrix_get_zigzag_from_raster (guint8 out_quant[64],
+    const guint8 quant[64])
+{
+  guint i;
+
+  g_return_if_fail (out_quant != quant);
+
+  for (i = 0; i < 64; i++)
+    out_quant[i] = quant[mpeg_zigzag_8x8[i]];
 }

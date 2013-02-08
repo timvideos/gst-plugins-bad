@@ -126,7 +126,13 @@ typedef enum
   GST_INTERLACE_PATTERN_2_2,
   GST_INTERLACE_PATTERN_2_3,
   GST_INTERLACE_PATTERN_2_3_3_2,
-  GST_INTERLACE_PATTERN_EURO
+  GST_INTERLACE_PATTERN_EURO,
+  GST_INTERLACE_PATTERN_3_4R3,
+  GST_INTERLACE_PATTERN_3R7_4,
+  GST_INTERLACE_PATTERN_3_3_4,
+  GST_INTERLACE_PATTERN_3_3,
+  GST_INTERLACE_PATTERN_3_2R4,
+  GST_INTERLACE_PATTERN_1_2R4,
 } GstInterlacePattern;
 
 #define GST_INTERLACE_PATTERN (gst_interlace_pattern_get_type ())
@@ -135,11 +141,21 @@ gst_interlace_pattern_get_type (void)
 {
   static GType interlace_pattern_type = 0;
   static const GEnumValue pattern_types[] = {
-    {GST_INTERLACE_PATTERN_1_1, "1:1", "1:1"},
-    {GST_INTERLACE_PATTERN_2_2, "2:2", "2:2"},
-    {GST_INTERLACE_PATTERN_2_3, "2:3", "2:3"},
-    {GST_INTERLACE_PATTERN_2_3_3_2, "2:3:3:2", "2:3:3:2"},
-    {GST_INTERLACE_PATTERN_EURO, "Euro 2-11:3", "2-11:3"},
+    {GST_INTERLACE_PATTERN_1_1, "1:1 (e.g. 60p -> 60i)", "1:1"},
+    {GST_INTERLACE_PATTERN_2_2, "2:2 (e.g. 30p -> 60i)", "2:2"},
+    {GST_INTERLACE_PATTERN_2_3, "2:3 (e.g. 24p -> 60i telecine)", "2:3"},
+    {GST_INTERLACE_PATTERN_2_3_3_2, "2:3:3:2 (e.g. 24p -> 60i telecine)",
+        "2:3:3:2"},
+    {GST_INTERLACE_PATTERN_EURO, "Euro 2-11:3 (e.g. 24p -> 50i telecine)",
+        "2-11:3"},
+    {GST_INTERLACE_PATTERN_3_4R3, "3:4-3 (e.g. 16p -> 60i telecine)", "3:4-3"},
+    {GST_INTERLACE_PATTERN_3R7_4, "3-7:4 (e.g. 16p -> 50i telecine)", "3-7:4"},
+    {GST_INTERLACE_PATTERN_3_3_4, "3:3:4 (e.g. 18p -> 60i telecine)", "3:3:4"},
+    {GST_INTERLACE_PATTERN_3_3, "3:3 (e.g. 20p -> 60i telecine)", "3:3"},
+    {GST_INTERLACE_PATTERN_3_2R4, "3:2-4 (e.g. 27.5p -> 60i telecine)",
+        "3:2-4"},
+    {GST_INTERLACE_PATTERN_1_2R4, "1:2-4 (e.g. 27.5p -> 50i telecine)",
+        "1:2-4"},
     {0, NULL, NULL}
   };
 
@@ -299,7 +315,19 @@ static const PulldownFormat formats[] = {
   {"2:3", 5, 4, {2, 3,}},
   {"2:3:3:2", 5, 4, {2, 3, 3, 2,}},
   /* 24p -> 50i Euro pulldown */
-  {"2-11:3", 25, 24, {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,}}
+  {"2-11:3", 25, 24, {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,}},
+  /* 16p (16000/1001) -> 60i (NTSC 30000/1001) */
+  {"3:4-3", 15, 8, {3, 4, 4, 4,}},
+  /* 16p -> 50i (PAL) */
+  {"3-7:4", 25, 16, {3, 3, 3, 3, 3, 3, 3, 4,}},
+  /* 18p to NTSC 60i */
+  {"3:3:4", 5, 3, {3, 3, 4,}},
+  /* 20p to NTSC 60i */
+  {"3:3", 3, 2, {3, 3,}},
+  /* 27.5 to NTSC 60i */
+  {"3:2-4", 11, 10, {3, 2, 2, 2, 2,}},
+  /* 27.5 to PAL 50i */
+  {"1:2-4", 9, 10, {1, 2, 2, 2, 2,}},
 };
 
 static void
@@ -471,6 +499,7 @@ gst_interlace_getcaps (GstPad * pad, GstInterlace * interlace, GstCaps * filter)
   GstPad *otherpad;
   GstCaps *othercaps, *tcaps;
   GstCaps *icaps;
+  const char *mode;
 
   otherpad =
       (pad == interlace->srcpad) ? interlace->sinkpad : interlace->srcpad;
@@ -492,8 +521,13 @@ gst_interlace_getcaps (GstPad * pad, GstInterlace * interlace, GstCaps * filter)
   }
 
   icaps = gst_caps_make_writable (icaps);
+  if (interlace->pattern > GST_INTERLACE_PATTERN_2_2) {
+    mode = "mixed";
+  } else {
+    mode = "interleaved";
+  }
   gst_caps_set_simple (icaps, "interlace-mode", G_TYPE_STRING,
-      pad == interlace->srcpad ? "mixed" : "progressive", NULL);
+      pad == interlace->srcpad ? mode : "progressive", NULL);
 
   gst_caps_unref (tcaps);
 

@@ -193,8 +193,8 @@ typedef struct _GstMpegVideoPacket          GstMpegVideoPacket;
  * @bitrate_value: Value of the bitrate as is in the stream (400bps unit)
  * @bitrate: the real bitrate of the Mpeg video stream in bits per second, 0 if VBR stream
  * @constrained_parameters_flag: %TRUE if this stream uses contrained parameters.
- * @intra_quantizer_matrix: intra-quantization table
- * @non_intra_quantizer_matrix: non-intra quantization table
+ * @intra_quantizer_matrix: intra-quantization table, in zigzag scan order
+ * @non_intra_quantizer_matrix: non-intra quantization table, in zigzag scan order
  *
  * The Mpeg2 Video Sequence Header structure.
  */
@@ -283,7 +283,9 @@ struct _GstMpegVideoSequenceDisplayExt
  * @load_chroma_non_intra_quantiser_matrix:
  * @chroma_non_intra_quantiser_matrix:
  *
- * The Quant Matrix Extension structure
+ * The Quant Matrix Extension structure that exposes quantization
+ * matrices in zigzag scan order. i.e. the original encoded scan
+ * order.
  */
 struct _GstMpegVideoQuantMatrixExt
 {
@@ -425,6 +427,12 @@ gboolean gst_mpeg_video_parse_sequence_display_extension (GstMpegVideoSequenceDi
 
 gboolean gst_mpeg_video_parse_quant_matrix_extension  (GstMpegVideoQuantMatrixExt * quant,
                                                        const guint8 * data, gsize size, guint offset);
+
+void     gst_mpeg_video_quant_matrix_get_raster_from_zigzag (guint8 out_quant[64],
+                                                             const guint8 quant[64]);
+
+void     gst_mpeg_video_quant_matrix_get_zigzag_from_raster (guint8 out_quant[64],
+                                                             const guint8 quant[64]);
 
 G_END_DECLS
 
