@@ -181,7 +181,7 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
 {
   GstElement *source, *dvdemuxer, *audioconverter, *dvdecoder;
   GstElement *videoconvert1, *videoconvert2, *queue1, *queue2;
-  GstElement *speakertracker, *xvimagesink, *audiosink;
+  GstElement *facedetect, *xvimagesink, *audiosink;
   GstElement *demuxSinks[2];
 
   /* Create elements */
@@ -211,9 +211,9 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
     return FALSE;
   }
 
-  speakertracker = gst_element_factory_make ("speakertrack", "speaker-tracker");
-  if (!speakertracker) {
-    g_warning ("'speakertrack' plugin missing\n");
+  facedetect = gst_element_factory_make ("facedetect", "face-detect");
+  if (!facedetect) {
+    g_warning ("'facedetect' plugin missing\n");
     return FALSE;
   }
 
@@ -246,12 +246,12 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
     profile = "";
 
   g_object_set (G_OBJECT (source), "location", filename, NULL);
-  g_object_set (G_OBJECT (speakertracker), "profile", profile, NULL);
-  g_object_set (G_OBJECT (speakertracker), "min-size-width", 60, NULL);
-  g_object_set (G_OBJECT (speakertracker), "min-size-height", 60, NULL);
+  g_object_set (G_OBJECT (facedetect), "profile", profile, NULL);
+  g_object_set (G_OBJECT (facedetect), "min-size-width", 60, NULL);
+  g_object_set (G_OBJECT (facedetect), "min-size-height", 60, NULL);
 
   gst_bin_add_many (GST_BIN (pipe), source, dvdemuxer, dvdecoder,
-      videoconvert1, speakertracker, videoconvert2, xvimagesink,
+      videoconvert1, facedetect, videoconvert2, xvimagesink,
       audioconverter, audiosink, queue1, queue2, NULL);
 
   /* link elements */
@@ -263,7 +263,7 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
     g_warning ("failed to link element (%d)\n", __LINE__);
   }
 
-  if (!gst_element_link_many (queue2, dvdecoder, videoconvert1, speakertracker,
+  if (!gst_element_link_many (queue2, dvdecoder, videoconvert1, facedetect,
           videoconvert2, xvimagesink, NULL)) {
     g_warning ("failed to link element (%d)\n", __LINE__);
   }
@@ -337,7 +337,7 @@ main (int argc, char **argv)
 
   g_signal_connect (video_window, "button-press-event",
       G_CALLBACK (on_video_pressed), gst_bin_get_by_name (GST_BIN (bin),
-          "speaker-tracker"));
+          "face-detect"));
 
   gtk_widget_set_events (video_window, GDK_EXPOSURE_MASK
       //| GDK_LEAVE_NOTIFY_MASK
