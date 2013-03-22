@@ -2251,6 +2251,7 @@ gst/smooth/Makefile
 gst/speed/Makefile
 gst/subenc/Makefile
 gst/stereo/Makefile
+gst/tcpfunnel/Makefile
 gst/tta/Makefile
 gst/videofilters/Makefile
 gst/videomeasure/Makefile
@@ -2383,6 +2384,7 @@ pkgconfig/gstreamer-insertbin-uninstalled.pc
 pkgconfig/gstreamer-basevideo.pc
 pkgconfig/gstreamer-basevideo-uninstalled.pc
 tools/Makefile
+tools/gst-switch/Makefile
 m4/Makefile
 win32/common/config.h
 )
