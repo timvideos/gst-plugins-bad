@@ -2251,7 +2251,6 @@ gst/smooth/Makefile
 gst/speed/Makefile
 gst/subenc/Makefile
 gst/stereo/Makefile
-gst/tcpfunnel/Makefile
 gst/tta/Makefile
 gst/videofilters/Makefile
 gst/videomeasure/Makefile

@@ -41,38 +41,76 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_SPEAKER_TRACK_H__
-#define __GST_SPEAKER_TRACK_H__
+#ifndef __GST_FACE_DETECT_H__
+#define __GST_FACE_DETECT_H__
 
 #include <gst/gst.h>
-#include <gst/base/gstbasetransform.h>
+#include <cv.h>
+#include "gstopencvvideofilter.h"
+
+#if (CV_MAJOR_VERSION >= 2) && (CV_MINOR_VERSION >= 2)
+#include <opencv2/objdetect/objdetect.hpp>
+#endif
 
 G_BEGIN_DECLS
 /* #defines don't like whitespacey bits */
-#define GST_TYPE_SPEAKER_TRACK \
-  (gst_speaker_track_get_type())
-#define GST_SPEAKER_TRACK(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SPEAKER_TRACK,GstSpeakerTrack))
-#define GST_SPEAKER_TRACK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SPEAKER_TRACK,GstSpeakerTrackClass))
-#define GST_IS_SPEAKER_TRACK(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SPEAKER_TRACK))
-#define GST_IS_SPEAKER_TRACK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SPEAKER_TRACK))
-typedef struct _GstSpeakerTrack GstSpeakerTrack;
-typedef struct _GstSpeakerTrackClass GstSpeakerTrackClass;
+#define GST_TYPE_FACE_DETECT \
+  (gst_face_detect_get_type())
+#define GST_FACE_DETECT(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FACE_DETECT,GstFaceDetect))
+#define GST_FACE_DETECT_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FACE_DETECT,GstFaceDetectClass))
+#define GST_IS_FACE_DETECT(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FACE_DETECT))
+#define GST_IS_FACE_DETECT_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FACE_DETECT))
+typedef struct _GstFaceDetect GstFaceDetect;
+typedef struct _GstFaceDetectClass GstFaceDetectClass;
 
-struct _GstSpeakerTrack
+struct _GstFaceDetect
 {
-  GstBaseTransform base;
+  GstOpencvVideoFilter element;
+
+  gboolean display;
+  gboolean display_nose;
+  gboolean display_mouth;
+  gboolean display_eyes;
+
+  gboolean detect_nose;
+  gboolean detect_mouth;
+  gboolean detect_eyes;
+  gboolean detect_per_frame;
+
+  gchar *face_profile;
+  gchar *nose_profile;
+  gchar *mouth_profile;
+  gchar *eyes_profile;
+  gdouble scale_factor;
+  gint min_neighbors;
+  gint flags;
+  gint min_size_width;
+  gint min_size_height;
+
+  IplImage *cvGray;
+  CvHaarClassifierCascade *cvFacedetect;
+  CvHaarClassifierCascade *cvNoseDetect;
+  CvHaarClassifierCascade *cvMouthDetect;
+  CvHaarClassifierCascade *cvEyesDetect;
+  CvMemStorage *cvStorage;
+
+  gboolean locked;
+  GstStructure *active_face;
+  GstClockTime lock_stamp;
+  GstClockTime last_detect_stamp;
+  GList *faces;
 };
 
-struct _GstSpeakerTrackClass
+struct _GstFaceDetectClass
 {
-  GstBaseTransformClass base_class;
+  GstOpencvVideoFilterClass parent_class;
 };
 
-GType gst_speaker_track_get_type (void);
+GType gst_face_detect_get_type (void);
 
 G_END_DECLS
-#endif /* __GST_SPEAKER_TRACK_H__ */
+#endif /* __GST_FACE_DETECT_H__ */

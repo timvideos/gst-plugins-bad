@@ -1,6 +1,7 @@
 plugin_LTLIBRARIES = libgstspeakertrack.la
 
 libgstspeakertrack_la_SOURCES = \
+	gstfacedetect.c \
 	gstspeakertrack.c
 
 libgstspeakertrack_la_CXXFLAGS = $(GST_CXXFLAGS) $(OPENCV_CFLAGS)
@@ -16,4 +17,5 @@ libgstspeakertrack_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -L$(top_srcdir)/ext/opencv
 libgstspeakertrack_la_LIBTOOLFLAGS = --tag=disable-static
 
 noinst_HEADERS = \
+	gstfacedetect.h \
 	gstspeakertrack.h
