@@ -157,22 +157,17 @@ on_video_pressed (GtkWidget * widget, GdkEventButton * event, gpointer data)
 {
   gint x = (gint) event->x;
   gint y = (gint) event->y;
-  GstElement *tracker = (GstElement *) data;
+  GstElement *tracker = GST_ELEMENT (data);
   GstStructure *s = gst_structure_new ("select",
       "x", G_TYPE_INT, x,
       "y", G_TYPE_INT, y,
       NULL);
   GstEvent *selev = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM, s);
-  //GstPad * pad;
-
-  s = NULL;
 
   if (!gst_element_send_event (tracker, selev)) {
     g_warning ("can't send select event\n");
   }
   //g_print ("press: %d, (%d, %d)\n", event->button, x, y);
-
-  selev = NULL;
   return TRUE;
 }
 
@@ -181,7 +176,7 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
 {
   GstElement *source, *dvdemuxer, *audioconverter, *dvdecoder;
   GstElement *videoconvert1, *videoconvert2, *queue1, *queue2;
-  GstElement *facedetect, *xvimagesink, *audiosink;
+  GstElement *facedetect, *speakertrack, *xvimagesink, *audiosink;
   GstElement *demuxSinks[2];
 
   /* Create elements */
@@ -211,9 +206,15 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
     return FALSE;
   }
 
-  facedetect = gst_element_factory_make ("facedetect", "face-detect");
+  facedetect = gst_element_factory_make ("facedetect2", "face-detect");
   if (!facedetect) {
-    g_warning ("'facedetect' plugin missing\n");
+    g_warning ("'facedetect2' plugin missing\n");
+    return FALSE;
+  }
+
+  speakertrack = gst_element_factory_make ("speakertrack", "speaker-track");
+  if (!speakertrack) {
+    g_warning ("'speakertrack' plugin missing\n");
     return FALSE;
   }
 
@@ -251,7 +252,7 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
   g_object_set (G_OBJECT (facedetect), "min-size-height", 60, NULL);
 
   gst_bin_add_many (GST_BIN (pipe), source, dvdemuxer, dvdecoder,
-      videoconvert1, facedetect, videoconvert2, xvimagesink,
+      videoconvert1, facedetect, speakertrack, videoconvert2, xvimagesink,
       audioconverter, audiosink, queue1, queue2, NULL);
 
   /* link elements */
@@ -264,7 +265,7 @@ add_file_source (GstElement * pipe, const char *filename, const char *profile)
   }
 
   if (!gst_element_link_many (queue2, dvdecoder, videoconvert1, facedetect,
-          videoconvert2, xvimagesink, NULL)) {
+          speakertrack, videoconvert2, xvimagesink, NULL)) {
     g_warning ("failed to link element (%d)\n", __LINE__);
   }
 
@@ -285,19 +286,29 @@ main (int argc, char **argv)
   GstBus *bus;
   gulong embed_xid;
   int bus_watch_id;
-  const char *profile;
-
-  if (argc == 2) {
-    profile = NULL;
-  } else if (argc == 3) {
-    profile = argv[2];
-  } else {
-    g_print ("Usage: %s <DV file> [<profile>]\n", argv[0]);
-    return __LINE__;
-  }
+  const char *profile = NULL;
+  const char *dvfile = NULL;
 
   gst_init (&argc, &argv);
   gtk_init (&argc, &argv);
+
+  for (int n = 1; n < argc; ++n) {
+    if (argv[n][0] == '-')
+      continue;
+    if (dvfile == NULL)
+      dvfile = argv[n];
+    continue;
+    if (profile == NULL)
+      profile = argv[n];
+    continue;
+  }
+
+  g_print ("\n%s (%s)\n", dvfile, profile);
+
+  if (!dvfile) {
+    g_print ("Usage: %s <DV file> [<profile>]\n", argv[0]);
+    return __LINE__;
+  }
 
   bin = gst_pipeline_new ("speaker-tracking-bin");
   if (!bin) {
@@ -305,8 +316,8 @@ main (int argc, char **argv)
     return __LINE__;
   }
 
-  if (!add_file_source (bin, argv[1], profile)) {
-    g_warning ("failed to init file: %s\n", argv[1]);
+  if (!add_file_source (bin, dvfile, profile)) {
+    g_warning ("failed to init file: %s\n", dvfile);
     return __LINE__;
   }
 
@@ -337,7 +348,7 @@ main (int argc, char **argv)
 
   g_signal_connect (video_window, "button-press-event",
       G_CALLBACK (on_video_pressed), gst_bin_get_by_name (GST_BIN (bin),
-          "face-detect"));
+          "speaker-track" /*"face-detect" */ ));
 
   gtk_widget_set_events (video_window, GDK_EXPOSURE_MASK
       //| GDK_LEAVE_NOTIFY_MASK

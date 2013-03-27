@@ -40,5 +40,3 @@ EXTRA_DIST = \
 #	CPPFLAGS="-I$(abs_srcdir)"
 #
 #TESTS = gst-element-maker-test.sh
-
-SUBDIRS := gst-switch
