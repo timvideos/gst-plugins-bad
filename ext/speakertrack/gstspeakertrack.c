@@ -484,7 +484,7 @@ gst_speaker_track_class_init (GstSpeakerTrackClass * klass)
       0, "Tracking selected face, report tracking to message bus.");
 }
 
-#include "gstfacedetect.h"
+#include "gstfacedetect2.h"
 
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
@@ -494,7 +494,7 @@ static gboolean
 plugin_init (GstPlugin * plugin)
 {
   if (!gst_element_register (plugin, "facedetect2", GST_RANK_NONE,
-          GST_TYPE_FACE_DETECT)) {
+          GST_TYPE_FACE_DETECT2)) {
     return FALSE;
   }
 
