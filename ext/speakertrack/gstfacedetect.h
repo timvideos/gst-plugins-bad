@@ -71,10 +71,10 @@ struct _GstFaceDetect
 {
   GstOpencvVideoFilter element;
 
-  gboolean display;
-  gboolean display_nose;
-  gboolean display_mouth;
-  gboolean display_eyes;
+  gboolean mark_face;
+  gboolean mark_eyes;
+  gboolean mark_nose;
+  gboolean mark_mouth;
 
   gboolean detect_nose;
   gboolean detect_mouth;
@@ -87,9 +87,9 @@ struct _GstFaceDetect
   gchar *eyes_profile;
   gdouble scale_factor;
   gint min_neighbors;
-  gint flags;
   gint min_size_width;
   gint min_size_height;
+  gint flags;
 
   IplImage *cvGray;
   CvHaarClassifierCascade *cvFacedetect;
@@ -98,10 +98,8 @@ struct _GstFaceDetect
   CvHaarClassifierCascade *cvEyesDetect;
   CvMemStorage *cvStorage;
 
-  gboolean locked;
-  GstStructure *active_face;
-  GstClockTime lock_stamp;
   GstClockTime last_detect_stamp;
+  GstStructure *focus_face;
   GList *faces;
 };
 
