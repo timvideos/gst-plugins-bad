@@ -41,8 +41,8 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_FACE_DETECT_H__
-#define __GST_FACE_DETECT_H__
+#ifndef __GST_FACE_DETECT2_H__
+#define __GST_FACE_DETECT2_H__
 
 #include <gst/gst.h>
 #include <cv.h>
@@ -54,20 +54,20 @@
 
 G_BEGIN_DECLS
 /* #defines don't like whitespacey bits */
-#define GST_TYPE_FACE_DETECT \
-  (gst_face_detect_get_type())
-#define GST_FACE_DETECT(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FACE_DETECT,GstFaceDetect))
-#define GST_FACE_DETECT_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FACE_DETECT,GstFaceDetectClass))
-#define GST_IS_FACE_DETECT(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FACE_DETECT))
-#define GST_IS_FACE_DETECT_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FACE_DETECT))
-typedef struct _GstFaceDetect GstFaceDetect;
-typedef struct _GstFaceDetectClass GstFaceDetectClass;
+#define GST_TYPE_FACE_DETECT2 \
+  (gst_face_detect2_get_type())
+#define GST_FACE_DETECT2(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FACE_DETECT2,GstFaceDetect2))
+#define GST_FACE_DETECT2_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FACE_DETECT2,GstFaceDetect2Class))
+#define GST_IS_FACE_DETECT2(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FACE_DETECT2))
+#define GST_IS_FACE_DETECT2_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FACE_DETECT2))
+typedef struct _GstFaceDetect2 GstFaceDetect2;
+typedef struct _GstFaceDetect2Class GstFaceDetect2Class;
 
-struct _GstFaceDetect
+struct _GstFaceDetect2
 {
   GstOpencvVideoFilter element;
 
@@ -103,12 +103,12 @@ struct _GstFaceDetect
   GList *faces;
 };
 
-struct _GstFaceDetectClass
+struct _GstFaceDetect2Class
 {
   GstOpencvVideoFilterClass parent_class;
 };
 
-GType gst_face_detect_get_type (void);
+GType gst_face_detect2_get_type (void);
 
 G_END_DECLS
-#endif /* __GST_FACE_DETECT_H__ */
+#endif /* __GST_FACE_DETECT2_H__ */
