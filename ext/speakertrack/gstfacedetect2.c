@@ -46,9 +46,9 @@
  *
  * Performs face detection on videos and images.
  *
- * The image is scaled down multiple times using the GstFaceDetect::scale-factor
- * until the size is &lt;= GstFaceDetect::min-size-width or 
- * GstFaceDetect::min-size-height.
+ * The image is scaled down multiple times using the GstFaceDetect2::scale-factor
+ * until the size is &lt;= GstFaceDetect2::min-size-width or 
+ * GstFaceDetect2::min-size-height.
  *
  * <refsect2>
  * <title>Example launch line</title>
@@ -77,10 +77,10 @@
 #include <glib/gprintf.h>
 
 #include "gstopencvutils.h"
-#include "gstfacedetect.h"
+#include "gstfacedetect2.h"
 
-GST_DEBUG_CATEGORY_STATIC (gst_face_detect_debug);
-#define GST_CAT_DEFAULT gst_face_detect_debug
+GST_DEBUG_CATEGORY_STATIC (gst_face_detect2_debug);
+#define GST_CAT_DEFAULT gst_face_detect2_debug
 
 #define HAAR_CASCADES_DIR OPENCV_PREFIX "/share/opencv/haarcascades/"
 #define DEFAULT_FACE_PROFILE HAAR_CASCADES_DIR "haarcascade_frontalface_default.xml"
@@ -92,7 +92,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_face_detect_debug);
 #define DEFAULT_MIN_NEIGHBORS 3
 #define DEFAULT_MIN_SIZE_WIDTH 0
 #define DEFAULT_MIN_SIZE_HEIGHT 0
-#define FACE_DETECT_TIME_GAP 6000
+#define FACE_DETECT2_TIME_GAP 6000
 
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define min(a,b) ((a) < (b) ? (a) : (b))
@@ -128,35 +128,35 @@ enum
 
 
 /*
- * GstFaceDetectFlags:
+ * GstFaceDetect2Flags:
  *
  * Flags parameter to OpenCV's cvHaarDetectObjects function.
  */
 typedef enum
 {
-  GST_FACE_DETECT_HAAR_DO_CANNY_PRUNING = (1 << 0)
-} GstFaceDetectFlags;
+  GST_FACE_DETECT2_HAAR_DO_CANNY_PRUNING = (1 << 0)
+} GstFaceDetect2Flags;
 
-#define GST_TYPE_FACE_DETECT_FLAGS (gst_face_detect_flags_get_type())
+#define GST_TYPE_FACE_DETECT2_FLAGS (gst_face_detect2_flags_get_type())
 
 static void
-gst_face_detect_register_flags (GType * id)
+gst_face_detect2_register_flags (GType * id)
 {
   static const GFlagsValue values[] = {
-    {(guint) GST_FACE_DETECT_HAAR_DO_CANNY_PRUNING,
+    {(guint) GST_FACE_DETECT2_HAAR_DO_CANNY_PRUNING,
         "Do Canny edge detection to discard some regions", "do-canny-pruning"},
     {0, NULL, NULL}
   };
-  *id = g_flags_register_static ("GstFaceDetectFlags", values);
+  *id = g_flags_register_static ("GstFaceDetect2Flags", values);
 }
 
 static GType
-gst_face_detect_flags_get_type (void)
+gst_face_detect2_flags_get_type (void)
 {
   static GType id;
   static GOnce once = G_ONCE_INIT;
 
-  g_once (&once, (GThreadFunc) gst_face_detect_register_flags, &id);
+  g_once (&once, (GThreadFunc) gst_face_detect2_register_flags, &id);
   return id;
 }
 
@@ -174,16 +174,16 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("RGB"))
     );
 
-G_DEFINE_TYPE (GstFaceDetect, gst_face_detect, GST_TYPE_OPENCV_VIDEO_FILTER);
+G_DEFINE_TYPE (GstFaceDetect2, gst_face_detect2, GST_TYPE_OPENCV_VIDEO_FILTER);
 
-static CvHaarClassifierCascade *gst_face_detect_load_profile (GstFaceDetect
+static CvHaarClassifierCascade *gst_face_detect2_load_profile (GstFaceDetect2
     * detect, gchar * profile);
 
 /* initialize the new element
  * initialize instance structure
  */
 static void
-gst_face_detect_init (GstFaceDetect * detect)
+gst_face_detect2_init (GstFaceDetect2 * detect)
 {
   detect->mark_face = 1;
   detect->mark_eyes = 0;
@@ -199,13 +199,13 @@ gst_face_detect_init (GstFaceDetect * detect)
   detect->min_size_width = DEFAULT_MIN_SIZE_WIDTH;
   detect->min_size_height = DEFAULT_MIN_SIZE_HEIGHT;
   detect->cvFacedetect =
-      gst_face_detect_load_profile (detect, detect->face_profile);
+      gst_face_detect2_load_profile (detect, detect->face_profile);
   detect->cvNoseDetect =
-      gst_face_detect_load_profile (detect, detect->nose_profile);
+      gst_face_detect2_load_profile (detect, detect->nose_profile);
   detect->cvMouthDetect =
-      gst_face_detect_load_profile (detect, detect->mouth_profile);
+      gst_face_detect2_load_profile (detect, detect->mouth_profile);
   detect->cvEyesDetect =
-      gst_face_detect_load_profile (detect, detect->eyes_profile);
+      gst_face_detect2_load_profile (detect, detect->eyes_profile);
 
   detect->focus_face = NULL;
   detect->faces = NULL;
@@ -216,9 +216,9 @@ gst_face_detect_init (GstFaceDetect * detect)
 
 /* Clean up */
 static void
-gst_face_detect_finalize (GObject * obj)
+gst_face_detect2_finalize (GObject * obj)
 {
-  GstFaceDetect *detect = GST_FACE_DETECT (obj);
+  GstFaceDetect2 *detect = GST_FACE_DETECT2 (obj);
 
   if (detect->cvGray)
     cvReleaseImage (&detect->cvGray);
@@ -245,14 +245,14 @@ gst_face_detect_finalize (GObject * obj)
   if (detect->cvEyesDetect)
     cvReleaseHaarClassifierCascade (&detect->cvEyesDetect);
 
-  G_OBJECT_CLASS (gst_face_detect_parent_class)->finalize (obj);
+  G_OBJECT_CLASS (gst_face_detect2_parent_class)->finalize (obj);
 }
 
 static gboolean
-gst_face_detect_send_event (GstElement * element, GstEvent * event)
+gst_face_detect2_send_event (GstElement * element, GstEvent * event)
 {
   GstElementClass *parent_class =
-      GST_ELEMENT_CLASS (gst_face_detect_parent_class);
+      GST_ELEMENT_CLASS (gst_face_detect2_parent_class);
   switch (GST_EVENT_TYPE (event)) {
     default:
       break;
@@ -261,10 +261,10 @@ gst_face_detect_send_event (GstElement * element, GstEvent * event)
 }
 
 static void
-gst_face_detect_set_property (GObject * object, guint prop_id,
+gst_face_detect2_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstFaceDetect *detect = GST_FACE_DETECT (object);
+  GstFaceDetect2 *detect = GST_FACE_DETECT2 (object);
 
   switch (prop_id) {
     case PROP_FACE_PROFILE:
@@ -277,7 +277,7 @@ gst_face_detect_set_property (GObject * object, guint prop_id,
         detect->face_profile = g_strdup (DEFAULT_FACE_PROFILE);
       }
       detect->cvFacedetect =
-          gst_face_detect_load_profile (detect, detect->face_profile);
+          gst_face_detect2_load_profile (detect, detect->face_profile);
       break;
     case PROP_NOSE_PROFILE:
       g_free (detect->nose_profile);
@@ -289,7 +289,7 @@ gst_face_detect_set_property (GObject * object, guint prop_id,
         detect->nose_profile = g_strdup (DEFAULT_NOSE_PROFILE);
       }
       detect->cvNoseDetect =
-          gst_face_detect_load_profile (detect, detect->nose_profile);
+          gst_face_detect2_load_profile (detect, detect->nose_profile);
       break;
     case PROP_MOUTH_PROFILE:
       g_free (detect->mouth_profile);
@@ -301,7 +301,7 @@ gst_face_detect_set_property (GObject * object, guint prop_id,
         detect->mouth_profile = g_strdup (DEFAULT_MOUTH_PROFILE);
       }
       detect->cvMouthDetect =
-          gst_face_detect_load_profile (detect, detect->mouth_profile);
+          gst_face_detect2_load_profile (detect, detect->mouth_profile);
       break;
     case PROP_EYES_PROFILE:
       g_free (detect->eyes_profile);
@@ -313,7 +313,7 @@ gst_face_detect_set_property (GObject * object, guint prop_id,
         detect->eyes_profile = g_strdup (DEFAULT_EYES_PROFILE);
       }
       detect->cvEyesDetect =
-          gst_face_detect_load_profile (detect, detect->eyes_profile);
+          gst_face_detect2_load_profile (detect, detect->eyes_profile);
       break;
     case PROP_MARK:
       detect->mark_face = g_value_get_boolean (value);
@@ -361,10 +361,10 @@ gst_face_detect_set_property (GObject * object, guint prop_id,
 }
 
 static void
-gst_face_detect_get_property (GObject * object, guint prop_id,
+gst_face_detect2_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstFaceDetect *detect = GST_FACE_DETECT (object);
+  GstFaceDetect2 *detect = GST_FACE_DETECT2 (object);
 
   switch (prop_id) {
     case PROP_FACE_PROFILE:
@@ -428,13 +428,13 @@ gst_face_detect_get_property (GObject * object, guint prop_id,
 
 /* this function handles the link with other elements */
 static gboolean
-gst_face_detect_set_caps (GstOpencvVideoFilter * transform, gint in_width,
+gst_face_detect2_set_caps (GstOpencvVideoFilter * transform, gint in_width,
     gint in_height, gint in_depth, gint in_channels,
     gint out_width, gint out_height, gint out_depth, gint out_channels)
 {
-  GstFaceDetect *detect;
+  GstFaceDetect2 *detect;
 
-  detect = GST_FACE_DETECT (transform);
+  detect = GST_FACE_DETECT2 (transform);
 
   if (detect->cvGray)
     cvReleaseImage (&detect->cvGray);
@@ -451,7 +451,7 @@ gst_face_detect_set_caps (GstOpencvVideoFilter * transform, gint in_width,
 }
 
 static CvSeq *
-gst_face_detect_run_detector (GstFaceDetect * detect,
+gst_face_detect2_run_detector (GstFaceDetect2 * detect,
     CvHaarClassifierCascade * detector, gint min_size_width,
     gint min_size_height)
 {
@@ -465,7 +465,7 @@ gst_face_detect_run_detector (GstFaceDetect * detect,
 }
 
 static void
-gst_face_detect_draw_rect_spots (IplImage * img, CvRect * r, CvScalar color,
+gst_face_detect2_draw_rect_spots (IplImage * img, CvRect * r, CvScalar color,
     int thikness CV_DEFAULT (2))
 {
   int radius = 1, linetype = 8;
@@ -488,7 +488,7 @@ gst_face_detect_draw_rect_spots (IplImage * img, CvRect * r, CvScalar color,
 }
 
 static gboolean
-gst_face_detect_get_face_rect (GstStructure * face, CvRect * rect,
+gst_face_detect2_get_face_rect (GstStructure * face, CvRect * rect,
     const gchar * prefix)
 {
   gchar name[16];
@@ -513,7 +513,7 @@ gst_face_detect_get_face_rect (GstStructure * face, CvRect * rect,
 
 /*
 static void
-gst_face_detect_select_face (GstFaceDetect * detect, gint x, gint y)
+gst_face_detect2_select_face (GstFaceDetect2 * detect, gint x, gint y)
 {
   CvRect r;
   GList *face;
@@ -524,7 +524,7 @@ gst_face_detect_select_face (GstFaceDetect * detect, gint x, gint y)
   }
 
   for (face = detect->faces; face; face = g_list_next (face)) {
-    if (gst_face_detect_get_face_rect (GST_STRUCTURE (face->data), &r, "")) {
+    if (gst_face_detect2_get_face_rect (GST_STRUCTURE (face->data), &r, "")) {
       if (r.x <= x && r.y <= y && x <= (r.x + r.width) && y <= (r.y + r.height)) {
         detect->focus_face = gst_structure_copy (GST_STRUCTURE (face->data));
         g_print ("select: [(%d, %d), %d, %d]\n", r.x, r.y, r.width, r.height);
@@ -535,7 +535,7 @@ gst_face_detect_select_face (GstFaceDetect * detect, gint x, gint y)
 */
 
 static gboolean
-gst_face_detect_mark_face (GstFaceDetect * detect, IplImage * img,
+gst_face_detect2_mark_face (GstFaceDetect2 * detect, IplImage * img,
     GstStructure * face, gint i)
 {
   CvPoint center;
@@ -551,10 +551,10 @@ gst_face_detect_mark_face (GstFaceDetect * detect, IplImage * img,
     return is_active;
   }
 
-  gst_face_detect_get_face_rect (face, &r, "");
+  gst_face_detect2_get_face_rect (face, &r, "");
 
   if (detect->focus_face) {
-    gst_face_detect_get_face_rect (detect->focus_face, &rr, "");
+    gst_face_detect2_get_face_rect (detect->focus_face, &rr, "");
     if (face == detect->focus_face || (r.x == rr.x && r.y == rr.y
             && r.width == rr.width && r.height == rr.height)) {
       cb = 225, cg = 25, cr = 25;
@@ -564,22 +564,22 @@ gst_face_detect_mark_face (GstFaceDetect * detect, IplImage * img,
   }
 
   if (detect->mark_face) {
-    gst_face_detect_draw_rect_spots (img, &r, CV_RGB (cr, cg, cb), thikness);
+    gst_face_detect2_draw_rect_spots (img, &r, CV_RGB (cr, cg, cb), thikness);
   }
 
-  have_nose = gst_face_detect_get_face_rect (face, &rr, "nose.");
+  have_nose = gst_face_detect2_get_face_rect (face, &rr, "nose.");
   if (have_nose && detect->mark_nose) {
     center.x = cvRound ((rr.x + rr.width / 2));
     center.y = cvRound ((rr.y + rr.height / 2));
     cvCircle (img, center, 1, CV_RGB (cr, cg, cb), 1, 8, 0);
   }
 
-  have_mouth = gst_face_detect_get_face_rect (face, &rr, "mouth.");
+  have_mouth = gst_face_detect2_get_face_rect (face, &rr, "mouth.");
   if (have_mouth && detect->mark_mouth) {
-    gst_face_detect_draw_rect_spots (img, &rr, CV_RGB (cr, cg, cb), 1);
+    gst_face_detect2_draw_rect_spots (img, &rr, CV_RGB (cr, cg, cb), 1);
   }
 
-  have_eyes = gst_face_detect_get_face_rect (face, &rr, "eyes.");
+  have_eyes = gst_face_detect2_get_face_rect (face, &rr, "eyes.");
   if (have_eyes && detect->mark_eyes) {
     center.x = rr.x;
     center.y = rr.y;
@@ -615,7 +615,7 @@ gst_face_detect_mark_face (GstFaceDetect * detect, IplImage * img,
 }
 
 static void
-gst_face_detect_mark_faces (GstFaceDetect * detect, IplImage * img)
+gst_face_detect2_mark_faces (GstFaceDetect2 * detect, IplImage * img)
 {
   gint i;
   GstStructure *face;
@@ -623,24 +623,24 @@ gst_face_detect_mark_faces (GstFaceDetect * detect, IplImage * img)
   gboolean active_marked = FALSE, b;
   for (i = 0; iter; iter = iter->next, ++i) {
     face = GST_STRUCTURE (iter->data);
-    b = gst_face_detect_mark_face (detect, img, face, i);
+    b = gst_face_detect2_mark_face (detect, img, face, i);
     active_marked = active_marked || b;
   }
 
   if (!active_marked) {
-    gst_face_detect_mark_face (detect, img, detect->focus_face, 0);
+    gst_face_detect2_mark_face (detect, img, detect->focus_face, 0);
   }
 }
 
 
 /**
- * @gst_face_detect_report_faces:
+ * @gst_face_detect2_report_faces:
  *
  * Report faces to the sibling element. It will take the ownership of
  * the @newfaces. 
  */
 static void
-gst_face_detect_report_faces (GstFaceDetect * detect, GList * newfaces)
+gst_face_detect2_report_faces (GstFaceDetect2 * detect, GList * newfaces)
 {
   GList *newface;
   GstIterator *iter = NULL;
@@ -755,7 +755,7 @@ gst_face_detect_report_faces (GstFaceDetect * detect, GList * newfaces)
 }
 
 static GstMessage *
-gst_face_detect_message_new (GstFaceDetect * filter, GstBuffer * buf)
+gst_face_detect2_message_new (GstFaceDetect2 * filter, GstBuffer * buf)
 {
   GstBaseTransform *trans = GST_BASE_TRANSFORM_CAST (filter);
   GstStructure *s;
@@ -779,10 +779,10 @@ gst_face_detect_message_new (GstFaceDetect * filter, GstBuffer * buf)
  * Performs the face detection
  */
 static GstFlowReturn
-gst_face_detect_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
+gst_face_detect2_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     IplImage * img)
 {
-  GstFaceDetect *detect = GST_FACE_DETECT (base);
+  GstFaceDetect2 *detect = GST_FACE_DETECT2 (base);
   CvSeq *faces = NULL;
   GList *newfaces = NULL;
   gint i, numFaces;
@@ -795,9 +795,9 @@ gst_face_detect_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     GstClockTime now = gst_util_get_timestamp ();
     GstClockTime diff = (now - detect->last_detect_stamp);
     //g_print ("%ld\n", (long int)((now - last) / 100000));
-    if ((diff / 100000) <= FACE_DETECT_TIME_GAP) {
+    if ((diff / 100000) <= FACE_DETECT2_TIME_GAP) {
       if (gst_buffer_is_writable (buf)) {
-        gst_face_detect_mark_faces (detect, img);
+        gst_face_detect2_mark_faces (detect, img);
       }
       return GST_FLOW_OK;
     }
@@ -807,7 +807,7 @@ gst_face_detect_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
   cvCvtColor (img, detect->cvGray, CV_RGB2GRAY);
   cvClearMemStorage (detect->cvStorage);
 
-  faces = gst_face_detect_run_detector (detect, detect->cvFacedetect,
+  faces = gst_face_detect2_run_detector (detect, detect->cvFacedetect,
       detect->min_size_width, detect->min_size_height);
 
   numFaces = (faces ? faces->total : 0);
@@ -831,7 +831,7 @@ gst_face_detect_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
       rnh = r->height / 2;
       cvSetImageROI (detect->cvGray, cvRect (rnx, rny, rnw, rnh));
       nose =
-          gst_face_detect_run_detector (detect, detect->cvNoseDetect, mw, mh);
+          gst_face_detect2_run_detector (detect, detect->cvNoseDetect, mw, mh);
       have_nose = (nose && nose->total);
       cvResetImageROI (detect->cvGray);
     } else {
@@ -845,7 +845,7 @@ gst_face_detect_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
       rmh = r->height / 2;
       cvSetImageROI (detect->cvGray, cvRect (rmx, rmy, rmw, rmh));
       mouth =
-          gst_face_detect_run_detector (detect, detect->cvMouthDetect, mw, mh);
+          gst_face_detect2_run_detector (detect, detect->cvMouthDetect, mw, mh);
       have_mouth = (mouth && mouth->total);
       cvResetImageROI (detect->cvGray);
     } else {
@@ -859,7 +859,7 @@ gst_face_detect_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
       reh = r->height / 2;
       cvSetImageROI (detect->cvGray, cvRect (rex, rey, rew, reh));
       eyes =
-          gst_face_detect_run_detector (detect, detect->cvEyesDetect, mw, mh);
+          gst_face_detect2_run_detector (detect, detect->cvEyesDetect, mw, mh);
       have_eyes = (eyes && eyes->total);
       cvResetImageROI (detect->cvGray);
     } else {
@@ -910,13 +910,13 @@ gst_face_detect_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
   }
 
   if (newfaces) {
-    GstMessage *msg = gst_face_detect_message_new (detect, buf);
+    GstMessage *msg = gst_face_detect2_message_new (detect, buf);
     GValue facelist = { 0 };
     GList *face = NULL;
 
     if (detect->faces)
       g_list_free_full (detect->faces, (GDestroyNotify) gst_structure_free);
-    gst_face_detect_report_faces (detect, detect->faces = newfaces);
+    gst_face_detect2_report_faces (detect, detect->faces = newfaces);
 
     g_value_init (&facelist, GST_TYPE_LIST);
     for (face = detect->faces; face; face = g_list_next (face)) {
@@ -936,13 +936,13 @@ gst_face_detect_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
   }
 
   if (gst_buffer_is_writable (buf)) {
-    gst_face_detect_mark_faces (detect, img);
+    gst_face_detect2_mark_faces (detect, img);
   }
   return GST_FLOW_OK;
 }
 
 static CvHaarClassifierCascade *
-gst_face_detect_load_profile (GstFaceDetect * detect, gchar * profile)
+gst_face_detect2_load_profile (GstFaceDetect2 * detect, gchar * profile)
 {
   CvHaarClassifierCascade *cascade;
 
@@ -955,19 +955,19 @@ gst_face_detect_load_profile (GstFaceDetect * detect, gchar * profile)
 
 /* initialize the facedetect's class */
 static void
-gst_face_detect_class_init (GstFaceDetectClass * klass)
+gst_face_detect2_class_init (GstFaceDetect2Class * klass)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GObjectClass *gobject_class = (GObjectClass *) klass;
   GstOpencvVideoFilterClass *gstopencvbasefilter_class =
       (GstOpencvVideoFilterClass *) klass;
 
-  gobject_class->finalize = GST_DEBUG_FUNCPTR (gst_face_detect_finalize);
-  gobject_class->set_property = gst_face_detect_set_property;
-  gobject_class->get_property = gst_face_detect_get_property;
+  gobject_class->finalize = GST_DEBUG_FUNCPTR (gst_face_detect2_finalize);
+  gobject_class->set_property = gst_face_detect2_set_property;
+  gobject_class->get_property = gst_face_detect2_get_property;
 
-  gstopencvbasefilter_class->cv_trans_ip_func = gst_face_detect_transform_ip;
-  gstopencvbasefilter_class->cv_set_caps = gst_face_detect_set_caps;
+  gstopencvbasefilter_class->cv_trans_ip_func = gst_face_detect2_transform_ip;
+  gstopencvbasefilter_class->cv_set_caps = gst_face_detect2_set_caps;
 
   g_object_class_install_property (gobject_class, PROP_MARK,
       g_param_spec_boolean ("display", "Display",
@@ -1028,7 +1028,7 @@ gst_face_detect_class_init (GstFaceDetectClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_FLAGS,
       g_param_spec_flags ("flags", "Flags", "Flags to cvHaarDetectObjects",
-          GST_TYPE_FACE_DETECT_FLAGS, DEFAULT_FLAGS,
+          GST_TYPE_FACE_DETECT2_FLAGS, DEFAULT_FLAGS,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_SCALE_FACTOR,
       g_param_spec_double ("scale-factor", "Scale factor",
@@ -1049,7 +1049,7 @@ gst_face_detect_class_init (GstFaceDetectClass * klass)
           "Minimum area height to be recognized as a face", 0, G_MAXINT,
           DEFAULT_MIN_SIZE_HEIGHT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  element_class->send_event = GST_DEBUG_FUNCPTR (gst_face_detect_send_event);
+  element_class->send_event = GST_DEBUG_FUNCPTR (gst_face_detect2_send_event);
 
   gst_element_class_set_static_metadata (element_class,
       "facedetect2",
@@ -1062,6 +1062,6 @@ gst_face_detect_class_init (GstFaceDetectClass * klass)
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&sink_factory));
 
-  GST_DEBUG_CATEGORY_INIT (gst_face_detect_debug, "facedetect2",
+  GST_DEBUG_CATEGORY_INIT (gst_face_detect2_debug, "facedetect2",
       0, "Performs face detection on videos, report faces via bus messages.");
 }
