@@ -65,6 +65,17 @@ typedef struct _GstSpeakerTrackClass GstSpeakerTrackClass;
 struct _GstSpeakerTrack
 {
   GstBaseTransform base;
+
+  gboolean display;
+  gboolean display_nose;
+  gboolean display_mouth;
+  gboolean display_eyes;
+
+  gboolean locked;
+  GstStructure *tracking_face;
+  GstClockTime lock_stamp;
+  GstClockTime last_detect_stamp;
+  GList *faces;
 };
 
 struct _GstSpeakerTrackClass
