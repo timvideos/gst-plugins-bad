@@ -189,6 +189,7 @@ gst_face_detect2_init (GstFaceDetect2 * detect)
   detect->mark_eyes = 0;
   detect->mark_nose = 0;
   detect->mark_mouth = 0;
+  detect->detect_per_frame = 0;
   detect->face_profile = g_strdup (DEFAULT_FACE_PROFILE);
   detect->nose_profile = g_strdup (DEFAULT_NOSE_PROFILE);
   detect->mouth_profile = g_strdup (DEFAULT_MOUTH_PROFILE);
@@ -640,75 +641,12 @@ gst_face_detect2_mark_faces (GstFaceDetect2 * detect, IplImage * img)
  * the @newfaces. 
  */
 static void
-gst_face_detect2_report_faces (GstFaceDetect2 * detect, GList * newfaces)
+gst_face_detect2_report_faces (GstFaceDetect2 * detect, GstStructure * s)
 {
-  GList *newface;
   GstIterator *iter = NULL;
   gboolean done = FALSE;
   GValue item = { 0 };
 
-#if 0
-  iter = gst_element_iterate_sink_pads (GST_ELEMENT (detect));
-  while (!done) {
-    switch (gst_iterator_next (iter, &item)) {
-      case GST_ITERATOR_OK:
-      {
-        GstPad *sinkpad = (GstPad *) g_value_get_object (&item);
-        /*
-           GstClockTime pad_min_latency, pad_max_latency;
-           gboolean pad_us_live;
-
-           if (gst_pad_peer_query (sinkpad, query)) {
-           gst_query_parse_latency (query, &pad_us_live, &pad_min_latency,
-           &pad_max_latency);
-
-           res = TRUE;
-
-           GST_DEBUG_OBJECT (adder, "Peer latency for pad %s: min %"
-           GST_TIME_FORMAT " max %" GST_TIME_FORMAT,
-           GST_PAD_NAME (sinkpad),
-           GST_TIME_ARGS (pad_min_latency), GST_TIME_ARGS (pad_max_latency));
-
-           min_latency = MAX (pad_min_latency, min_latency);
-           max_latency = MIN (pad_max_latency, max_latency);
-           }
-         */
-        for (newface = newfaces; newface; newface = g_list_next (newface)) {
-          GstStructure *s = gst_structure_copy (GST_STRUCTURE (newface->data));
-          GstEvent *ev = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM, s);
-          GstPad *pad = gst_pad_get_peer (sinkpad);
-          g_printf ("%s:%d: %s, %s\n", __FILE__, __LINE__,
-              gst_structure_get_name (s),
-              gst_element_get_name (GST_ELEMENT (gst_pad_get_parent (pad))));
-          if (!gst_pad_send_event (pad, ev)) {
-            /*
-               GST_WARNING_OBJECT (detect, "face ignored");
-             */
-          }
-          gst_object_unref (pad);
-        }
-      }
-        break;
-      case GST_ITERATOR_RESYNC:
-        //min_latency = 0;
-        //max_latency = G_MAXUINT64;
-        gst_iterator_resync (iter);
-        break;
-      case GST_ITERATOR_ERROR:
-        GST_ERROR_OBJECT (detect, "Error looping sink pads");
-        done = TRUE;
-        break;
-      case GST_ITERATOR_DONE:
-        done = TRUE;
-        break;
-    }
-    g_value_reset (&item);
-  }
-  g_value_unset (&item);
-  gst_iterator_free (iter);
-#endif
-
-#if 1
   done = FALSE;
   iter = gst_element_iterate_src_pads (GST_ELEMENT (detect));
   while (!done) {
@@ -716,22 +654,12 @@ gst_face_detect2_report_faces (GstFaceDetect2 * detect, GList * newfaces)
       case GST_ITERATOR_OK:
       {
         GstPad *srcpad = (GstPad *) g_value_get_object (&item);
-        for (newface = newfaces; newface; newface = g_list_next (newface)) {
-          GstStructure *s = gst_structure_copy (GST_STRUCTURE (newface->data));
-          GstEvent *ev = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM, s);
-          GstPad *pad = gst_pad_get_peer (srcpad);
-          /*
-             g_printf ("%s:%d: %s, %s\n", __FILE__, __LINE__,
-             gst_structure_get_name (s),
-             gst_element_get_name (GST_ELEMENT (gst_pad_get_parent (pad))));
-           */
-          if (!gst_pad_send_event (pad, ev)) {
-            /*
-               GST_WARNING_OBJECT (detect, "face ignored");
-             */
-          }
-          gst_object_unref (pad);
+        GstEvent *ev = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM, s);
+        GstPad *pad = gst_pad_get_peer (srcpad);
+        if (!gst_pad_send_event (pad, ev)) {
+          // GST_WARNING_OBJECT (detect, "face ignored");
         }
+        gst_object_unref (pad);
       }
         break;
       case GST_ITERATOR_RESYNC:
@@ -749,7 +677,6 @@ gst_face_detect2_report_faces (GstFaceDetect2 * detect, GList * newfaces)
   }
   g_value_unset (&item);
   gst_iterator_free (iter);
-#endif
 
   return;
 }
@@ -911,25 +838,27 @@ gst_face_detect2_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
 
   if (newfaces) {
     GstMessage *msg = gst_face_detect2_message_new (detect, buf);
-    GValue facelist = { 0 };
+    const GstStructure *structfaces = gst_message_get_structure (msg);
+    GValue facelist = G_VALUE_INIT;
     GList *face = NULL;
 
     if (detect->faces)
       g_list_free_full (detect->faces, (GDestroyNotify) gst_structure_free);
-    gst_face_detect2_report_faces (detect, detect->faces = newfaces);
+    detect->faces = newfaces;
 
     g_value_init (&facelist, GST_TYPE_LIST);
     for (face = detect->faces; face; face = g_list_next (face)) {
-      GValue facedata = { 0 };
+      GValue facedata = G_VALUE_INIT;
       g_value_init (&facedata, GST_TYPE_STRUCTURE);
-      g_value_take_boxed (&facedata,
+      gst_value_set_structure /*g_value_take_boxed */ (&facedata,
           gst_structure_copy (GST_STRUCTURE (face->data)));
       gst_value_list_append_value (&facelist, &facedata);
       g_value_unset (&facedata);
     }
 
-    gst_structure_set_value ((GstStructure *) gst_message_get_structure (msg),
-        "faces", &facelist);
+    gst_structure_set_value ((GstStructure *) structfaces, "faces", &facelist);
+    gst_face_detect2_report_faces (detect, gst_structure_copy (structfaces));
+
     g_value_unset (&facelist);
 
     gst_element_post_message (GST_ELEMENT (detect), msg);

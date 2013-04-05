@@ -75,8 +75,13 @@
 GST_DEBUG_CATEGORY_STATIC (gst_speaker_track_debug);
 #define GST_CAT_DEFAULT gst_speaker_track_debug
 
+#if 0
 #define FACE_MOTION_SCALE 0.65
 #define FACE_MOTION_SHIFT 0.25
+#else
+#define FACE_MOTION_SCALE 0.65
+#define FACE_MOTION_SHIFT 0.25
+#endif
 
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define min(a,b) ((a) < (b) ? (a) : (b))
@@ -153,8 +158,8 @@ static void gst_speaker_track_get_property (GObject * object, guint prop_id,
 static void
 gst_speaker_track_init (GstSpeakerTrack * track)
 {
-  track->faces = NULL;
   track->tracking_face = NULL;
+  track->faces = NULL;
 }
 
 static void
@@ -163,6 +168,8 @@ gst_speaker_track_finalize (GObject * obj)
   GstSpeakerTrack *track = GST_SPEAKER_TRACK (obj);
 
   g_list_free_full (track->faces, (GDestroyNotify) gst_structure_free);
+  gst_structure_free (track->tracking_face);
+  track->tracking_face = NULL;
 
   G_OBJECT_CLASS (gst_speaker_track_parent_class)->finalize (obj);
 }
@@ -289,6 +296,7 @@ gst_speaker_track_lock (GstSpeakerTrack * st, IplImage * img, GstBuffer * buf,
 }
 */
 
+/*
 static gboolean
 gst_speaker_track_compare_face (GstSpeakerTrack * filter,
     GstStructure * face1, GstStructure * face2)
@@ -299,10 +307,12 @@ gst_speaker_track_compare_face (GstSpeakerTrack * filter,
   float a = FACE_MOTION_SCALE, ix, iy, iw, ih;
   float off = FACE_MOTION_SHIFT;
 
-  gst_speaker_track_get_face_rect (face1, &face1_x, &face1_y, &face1_w,
-      &face1_h, "");
-  gst_speaker_track_get_face_rect (face2, &face2_x, &face2_y, &face2_w,
-      &face2_h, "");
+  gst_speaker_track_get_face_rect (face1,
+      &face1_x, &face1_y, &face1_w, &face1_h, "");
+  gst_speaker_track_get_face_rect (face2,
+      &face2_x, &face2_y, &face2_w, &face2_h, "");
+
+#if 0
   face_x = max (face1_x, face2_x);
   face_y = max (face1_y, face2_y);
   face_w = min (face1_x + face1_w, face2_x + face2_w) - face1_x;
@@ -320,18 +330,40 @@ gst_speaker_track_compare_face (GstSpeakerTrack * filter,
   if (ix <= off && iy <= off && a <= iw && a <= ih) {
     return TRUE;
   }
+#else
+  ix = max (face1_x, face2_x);
+  iy = max (face1_y, face2_y);
+  iw = min (face1_x + face1_w, face2_x + face2_w) - ix;
+  ih = min (face1_y + face1_h, face2_y + face2_h) - iy;
+  g_printf ("intersect: [(%f, %f), %fx%f]\n", ix, iy, iw, ih);
 
-  return FALSE;
+  if (iw <= 0 || ih <= 0) {
+    return FALSE;
+  }
+
+  (void) face_x;
+  (void) face_y;
+  (void) face_w;
+  (void) face_h;
+  (void) off;
+  (void) a;
+#endif
+
+  return TRUE;
 }
+*/
 
-static void
+static gboolean
 gst_speaker_track_select_face (GstSpeakerTrack * filter, gint x, gint y)
 {
+  gint selected = 0;
   GList *face;
+
+  g_print ("select: (%d, %d)\n", x, y);
 
   if (!filter->faces) {
     g_print ("select: no faces, (%d, %d)\n", x, y);
-    return;
+    return FALSE;
   }
 
   for (face = filter->faces; face; face = g_list_next (face)) {
@@ -340,14 +372,19 @@ gst_speaker_track_select_face (GstSpeakerTrack * filter, gint x, gint y)
             &fx, &fy, &fw, &fh, "")) {
       if (fx <= x && fy <= y && x <= (fx + fw) && y <= (fy + fh)) {
         filter->tracking_face = gst_structure_copy (GST_STRUCTURE (face->data));
-        g_print ("select: [(%d, %d), %d, %d]\n", fx, fy, fw, fh);
+        g_print ("selected: [(%d, %d), %d, %d]\n", fx, fy, fw, fh);
+        ++selected;
       }
     }
   }
+
+  return 0 < selected;
 }
 
+/*
 static void
-gst_speaker_track_update_face (GstSpeakerTrack * track, const GstStructure * s)
+gst_speaker_track_update_face (GstSpeakerTrack * track,
+    const GstStructure * s)
 {
   GstStructure *face = gst_structure_copy (s);
   GList *item = NULL;
@@ -355,8 +392,8 @@ gst_speaker_track_update_face (GstSpeakerTrack * track, const GstStructure * s)
 
   gst_speaker_track_get_face_rect (face, &x, &y, &w, &h, "");
 
-  g_print ("%s:%d: face (%d): [(%d, %d), %d, %d]\n",
-      __FILE__, __LINE__, g_list_length (track->faces), x, y, w, h);
+  g_print ("update: face[(%d, %d), %d, %d] (of %d faces)\n",
+      g_list_length (track->faces), x, y, w, h);
 
   for (item = track->faces; item; item = g_list_next (item)) {
     GstStructure *f = GST_STRUCTURE (item->data);
@@ -380,6 +417,32 @@ tracking_face:
     }
   }
 }
+*/
+
+static void
+gst_speaker_track_update_faces (GstSpeakerTrack * track, const GstStructure * s)
+{
+  const GValue *faces = gst_structure_get_value (s, "faces");
+  gsize size = faces ? gst_value_list_get_size (faces) : 0, n;
+
+  g_list_free_full (track->faces, (GDestroyNotify) gst_structure_free);
+  track->faces = NULL;
+
+  for (n = 0; n < size; ++n) {
+    const GValue *facevalue = gst_value_list_get_value (faces, n);
+    GstStructure *face = (GstStructure *) g_value_get_boxed (facevalue);
+    if (GST_IS_STRUCTURE (face)) {
+      guint x, y, w, h;
+      gst_structure_get_uint (face, "x", &x);
+      gst_structure_get_uint (face, "y", &y);
+      gst_structure_get_uint (face, "width", &w);
+      gst_structure_get_uint (face, "height", &h);
+      //gst_speaker_track_update_face (track, face);
+      g_printf ("face: [%d] [(%d, %d), %dx%d]\n", n, x, y, w, h);
+      track->faces = g_list_append (track->faces, gst_structure_copy (face));
+    }
+  }
+}
 
 static gboolean
 gst_speaker_track_send_event (GstElement * element, GstEvent * event)
@@ -390,12 +453,14 @@ gst_speaker_track_send_event (GstElement * element, GstEvent * event)
     case GST_EVENT_CUSTOM_DOWNSTREAM:{
       const GstStructure *s = gst_event_get_structure (event);
       if (gst_structure_has_name (s, "select")) {
+        gboolean selected = FALSE;
         gint x, y;
         if (gst_structure_get_int (s, "x", &x) &&
             gst_structure_get_int (s, "y", &y)) {
-          gst_speaker_track_select_face (GST_SPEAKER_TRACK (element), x, y);
+          selected =
+              gst_speaker_track_select_face (GST_SPEAKER_TRACK (element), x, y);
         }
-        return TRUE;
+        return selected;
       }
     }
       break;
@@ -414,8 +479,8 @@ gst_speaker_track_sink_eventfunc (GstBaseTransform * trans, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CUSTOM_DOWNSTREAM:{
       const GstStructure *s = gst_event_get_structure (event);
-      if (gst_structure_has_name (s, "face")) {
-        gst_speaker_track_update_face (track, s);
+      if (gst_structure_has_name (s, "facedetect")) {
+        gst_speaker_track_update_faces (track, s);
         return TRUE;
       }
     }
@@ -436,8 +501,8 @@ gst_speaker_track_src_eventfunc (GstBaseTransform * trans, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CUSTOM_UPSTREAM:{
       const GstStructure *s = gst_event_get_structure (event);
-      if (gst_structure_has_name (s, "face")) {
-        gst_speaker_track_update_face (track, s);
+      if (gst_structure_has_name (s, "facedetect")) {
+        gst_speaker_track_update_faces (track, s);
         return TRUE;
       }
     }
