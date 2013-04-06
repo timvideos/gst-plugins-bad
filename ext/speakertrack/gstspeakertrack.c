@@ -441,13 +441,54 @@ static void
 gst_speaker_track_report_tracking (GstSpeakerTrack * track, GstStructure * face)
 {
   GstMessage *msg = NULL;
-  GstStructure *s = gst_structure_copy (face);
+  GstStructure *s = NULL;
+  GstIterator *iter = NULL;
+  gboolean done = FALSE;
+  GValue item = { 0 };
 
   //g_print ("track: %d, %d, %d, %d\n", fx, fy, fw, fh);
 
+  s = gst_structure_copy (face);
   gst_structure_set_name (s, "facetrack");
   msg = gst_message_new_element (GST_OBJECT (track), s);
   gst_element_post_message (GST_ELEMENT (track), msg);
+
+
+  done = FALSE;
+  iter = gst_element_iterate_src_pads (GST_ELEMENT (track));
+  while (!done) {
+    switch (gst_iterator_next (iter, &item)) {
+      case GST_ITERATOR_OK:
+      {
+        GstPad *srcpad = NULL;
+        GstEvent *ev = NULL;
+        GstPad *pad = NULL;
+        s = gst_structure_copy (face);
+        gst_structure_set_name (s, "facetrack");
+        srcpad = (GstPad *) g_value_get_object (&item);
+        ev = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM, s);
+        pad = gst_pad_get_peer (srcpad);
+        if (!gst_pad_send_event (pad, ev)) {
+          // GST_WARNING_OBJECT (detect, "face ignored");
+        }
+        gst_object_unref (pad);
+      }
+        break;
+      case GST_ITERATOR_RESYNC:
+        gst_iterator_resync (iter);
+        break;
+      case GST_ITERATOR_ERROR:
+        GST_ERROR_OBJECT (track, "Error looping sink pads");
+        done = TRUE;
+        break;
+      case GST_ITERATOR_DONE:
+        done = TRUE;
+        break;
+    }
+    g_value_reset (&item);
+  }
+  g_value_unset (&item);
+  gst_iterator_free (iter);
 }
 
 static void
