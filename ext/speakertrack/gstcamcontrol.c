@@ -155,6 +155,21 @@ gst_cam_control_get_property (GObject * object, guint prop_id,
   }
 }
 
+static void
+gst_cam_control_face_track (GstCamcontrol * camctl, const GstStructure * s)
+{
+  guint fx, fy, fw, fh, x, y;
+  gst_structure_get_uint (s, "x", &fx);
+  gst_structure_get_uint (s, "y", &fy);
+  gst_structure_get_uint (s, "width", &fw);
+  gst_structure_get_uint (s, "height", &fh);
+
+  x = fx + fw * 0.5;
+  y = fy + fh * 0.5;
+
+  g_print ("camctl: (%d, %d)\n", x, y);
+}
+
 static gboolean
 gst_cam_control_send_event (GstElement * element, GstEvent * event)
 {
@@ -164,11 +179,7 @@ gst_cam_control_send_event (GstElement * element, GstEvent * event)
     case GST_EVENT_CUSTOM_DOWNSTREAM:{
       const GstStructure *s = gst_event_get_structure (event);
       if (gst_structure_has_name (s, "camctl")) {
-        gint x, y;
-        if (gst_structure_get_int (s, "x", &x) &&
-            gst_structure_get_int (s, "y", &y)) {
-          // TODO: adjust camera
-        }
+        // ...
         return TRUE;
       }
     }
@@ -184,13 +195,12 @@ static gboolean
 gst_cam_control_sink_eventfunc (GstBaseTransform * trans, GstEvent * event)
 {
   GstCamcontrol *camctl = GST_CAM_CONTROL (trans);
-  (void) camctl;
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CUSTOM_DOWNSTREAM:{
       const GstStructure *s = gst_event_get_structure (event);
-      if (gst_structure_has_name (s, "camctl")) {
-        // TODO: ...
+      if (gst_structure_has_name (s, "facetrack")) {
+        gst_cam_control_face_track (camctl, s);
         return TRUE;
       }
     }
@@ -207,13 +217,12 @@ static gboolean
 gst_cam_control_src_eventfunc (GstBaseTransform * trans, GstEvent * event)
 {
   GstCamcontrol *camctl = GST_CAM_CONTROL (trans);
-  (void) camctl;
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CUSTOM_UPSTREAM:{
       const GstStructure *s = gst_event_get_structure (event);
-      if (gst_structure_has_name (s, "camctl")) {
-        // TODO: ...
+      if (gst_structure_has_name (s, "facetrack")) {
+        gst_cam_control_face_track (camctl, s);
         return TRUE;
       }
     }
