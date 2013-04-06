@@ -41,51 +41,40 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_SPEAKER_TRACK_H__
-#define __GST_SPEAKER_TRACK_H__
+#ifndef __GST_CAM_CONTROL_H__
+#define __GST_CAM_CONTROL_H__
 
 #include <gst/gst.h>
 #include <gst/base/gstbasetransform.h>
 
 G_BEGIN_DECLS
 /* #defines don't like whitespacey bits */
-#define GST_TYPE_SPEAKER_TRACK \
-  (gst_speaker_track_get_type())
-#define GST_SPEAKER_TRACK(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SPEAKER_TRACK,GstSpeakerTrack))
-#define GST_SPEAKER_TRACK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SPEAKER_TRACK,GstSpeakerTrackClass))
-#define GST_IS_SPEAKER_TRACK(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SPEAKER_TRACK))
-#define GST_IS_SPEAKER_TRACK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SPEAKER_TRACK))
-typedef struct _GstSpeakerTrack GstSpeakerTrack;
-typedef struct _GstSpeakerTrackClass GstSpeakerTrackClass;
+#define GST_TYPE_CAM_CONTROL \
+  (gst_cam_control_get_type())
+#define GST_CAM_CONTROL(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_CAM_CONTROL,GstCamcontrol))
+#define GST_CAM_CONTROL_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_CAM_CONTROL,GstCamcontrolClass))
+#define GST_IS_CAM_CONTROL(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_CAM_CONTROL))
+#define GST_IS_CAM_CONTROL_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_CAM_CONTROL))
+typedef struct _GstCamcontrol GstCamcontrol;
+typedef struct _GstCamcontrolClass GstCamcontrolClass;
 
 typedef struct _TrackingFace TrackingFace;
 
-struct _GstSpeakerTrack
+struct _GstCamcontrol
 {
   GstBaseTransform base;
-
-  gboolean display;
-  gboolean display_nose;
-  gboolean display_mouth;
-  gboolean display_eyes;
-
-  GMutex faces_lock;
-  GstClockTime lock_stamp;
-  GstClockTime last_detect_stamp;
-  TrackingFace *tracking_face;
-  GList *faces;
 };
 
-struct _GstSpeakerTrackClass
+struct _GstCamcontrolClass
 {
   GstBaseTransformClass base_class;
 };
 
-GType gst_speaker_track_get_type (void);
+GType gst_cam_control_get_type (void);
 
 G_END_DECLS
-#endif /* __GST_SPEAKER_TRACK_H__ */
+#endif /* __GST_CAM_CONTROL_H__ */
