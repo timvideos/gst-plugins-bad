@@ -438,6 +438,19 @@ tracking_face:
 */
 
 static void
+gst_speaker_track_report_tracking (GstSpeakerTrack * track, GstStructure * face)
+{
+  GstMessage *msg = NULL;
+  GstStructure *s = gst_structure_copy (face);
+
+  //g_print ("track: %d, %d, %d, %d\n", fx, fy, fw, fh);
+
+  gst_structure_set_name (s, "facetrack");
+  msg = gst_message_new_element (GST_OBJECT (track), s);
+  gst_element_post_message (GST_ELEMENT (track), msg);
+}
+
+static void
 gst_speaker_track_update_tracking (GstSpeakerTrack * track)
 {
   guint ix, iy, iw, ih;         // intersect rectangle
@@ -469,7 +482,10 @@ gst_speaker_track_update_tracking (GstSpeakerTrack * track)
       track->tracking_face->y = fy;
       track->tracking_face->w = fw;
       track->tracking_face->h = fh;
-      g_print ("track: %d, %d, %d, %d\n", fx, fy, fw, fh);
+      //g_print ("track: %d, %d, %d, %d\n", fx, fy, fw, fh);
+
+      gst_speaker_track_report_tracking (track, face);
+      break;
     }
   }
 }
