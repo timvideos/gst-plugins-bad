@@ -41,6 +41,8 @@
  * Boston, MA 02110-1301, USA.
  */
 
+/*! @file */
+
 /**
  * SECTION:element-camcontrol
  *
@@ -69,8 +71,11 @@
 #include <gst/gst.h>
 #include <glib/gprintf.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "gstcamcontrol.h"
+#include "gstcamcontrol_visca.h"
+#include "gstcamcontrol_pana.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_cam_control_debug);
 #define GST_CAT_DEFAULT gst_cam_control_debug
@@ -85,6 +90,8 @@ enum
 enum
 {
   PROP_0,
+  PROP_DEVICE,
+  PROP_PROTOCOL,
 };
 
 /*
@@ -112,6 +119,67 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     GST_STATIC_CAPS_ANY);
 
 G_DEFINE_TYPE (GstCamcontrol, gst_cam_control, GST_TYPE_BASE_TRANSFORM);
+G_DEFINE_TYPE (GstCamController, gst_cam_controller, G_TYPE_OBJECT);
+
+static void
+gst_cam_controller_init (GstCamController * controller)
+{
+}
+
+static void
+gst_cam_controller_finalize (GstCamController * controller)
+{
+  G_OBJECT_CLASS (gst_cam_controller_parent_class)
+      ->finalize (G_OBJECT (controller));
+}
+
+static gboolean
+gst_cam_controller_open (GstCamController * controller, const char *dev)
+{
+  GstCamControllerClass *ccc =
+      GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
+  if (ccc->open)
+    return ccc->open (controller, dev);
+  return FALSE;
+}
+
+static void
+gst_cam_controller_close (GstCamController * controller)
+{
+  GstCamControllerClass *ccc =
+      GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
+  if (ccc->close)
+    return ccc->close (controller);
+}
+
+static gboolean
+gst_cam_controller_move (GstCamController * controller, gint x, gint y)
+{
+  GstCamControllerClass *ccc =
+      GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
+  if (ccc->move)
+    return ccc->move (controller, x, y);
+  return FALSE;
+}
+
+static gboolean
+gst_cam_controller_zoom (GstCamController * controller, gint z)
+{
+  GstCamControllerClass *ccc =
+      GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
+  if (ccc->zoom)
+    return ccc->zoom (controller, z);
+  return FALSE;
+}
+
+static void
+gst_cam_controller_class_init (GstCamControllerClass * ccclass)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (ccclass);
+
+  object_class->finalize = GST_DEBUG_FUNCPTR (
+      (GObjectFinalizeFunc) gst_cam_controller_finalize);
+}
 
 /* initialize the new element
  * initialize instance structure
@@ -119,12 +187,49 @@ G_DEFINE_TYPE (GstCamcontrol, gst_cam_control, GST_TYPE_BASE_TRANSFORM);
 static void
 gst_cam_control_init (GstCamcontrol * track)
 {
+  track->device = NULL;
+  track->protocol = NULL;
+  track->controller = NULL;
 }
 
 static void
 gst_cam_control_finalize (GObject * obj)
 {
+  GstCamcontrol *camctl = GST_CAM_CONTROL (obj);
+
+  g_free ((void *) camctl->device);
+  g_free ((void *) camctl->protocol);
+
+  if (camctl->controller) {
+    gst_cam_controller_close (camctl->controller);
+    g_object_unref (camctl->controller);
+  }
+
   G_OBJECT_CLASS (gst_cam_control_parent_class)->finalize (obj);
+}
+
+static gboolean
+gst_cam_control_prepare_controller (GstCamcontrol * camctl)
+{
+  if (camctl->controller) {
+    return TRUE;
+  }
+  if (!camctl->protocol) {
+    return FALSE;
+  }
+  if (!camctl->device) {
+    return FALSE;
+  }
+
+  if (strcmp (camctl->protocol, "visca") == 0) {
+    camctl->controller =
+        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_VISCA, NULL));
+  } else if (strcmp (camctl->protocol, "pana") == 0) {
+    camctl->controller =
+        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_PANA, NULL));
+  }
+
+  return gst_cam_controller_open (camctl->controller, camctl->device);
 }
 
 static void
@@ -132,9 +237,34 @@ gst_cam_control_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   GstCamcontrol *camctl = GST_CAM_CONTROL (object);
-  (void) camctl;
 
   switch (prop_id) {
+    case PROP_PROTOCOL:{
+      const char *const s = g_value_get_string (value);
+      if (camctl->protocol && strcmp (s, camctl->protocol) != 0) {
+        gst_cam_controller_close (camctl->controller);
+        g_object_unref (camctl->controller);
+        camctl->controller = NULL;
+      }
+
+      g_free ((void *) camctl->protocol);       // No need ot check NULL
+      camctl->protocol = g_strdup (s);
+
+      gst_cam_control_prepare_controller (camctl);
+    }
+      break;
+
+    case PROP_DEVICE:{
+      gboolean reprep = FALSE;
+      const char *const s = g_value_get_string (value);
+      if (camctl->device && strcmp (s, camctl->device) != 0)
+        reprep = TRUE;
+      camctl->device = g_strdup (s);
+      if (reprep)
+        gst_cam_control_prepare_controller (camctl);
+    }
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -149,6 +279,14 @@ gst_cam_control_get_property (GObject * object, guint prop_id,
   (void) camctl;
 
   switch (prop_id) {
+    case PROP_PROTOCOL:
+      g_value_set_string (value, camctl->protocol);
+      break;
+
+    case PROP_DEVICE:
+      g_value_set_string (value, camctl->device);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -158,7 +296,7 @@ gst_cam_control_get_property (GObject * object, guint prop_id,
 static void
 gst_cam_control_face_track (GstCamcontrol * camctl, const GstStructure * s)
 {
-  guint fx, fy, fw, fh, x, y;
+  guint fx, fy, fw, fh, x, y, z;
   gst_structure_get_uint (s, "x", &fx);
   gst_structure_get_uint (s, "y", &fy);
   gst_structure_get_uint (s, "width", &fw);
@@ -166,8 +304,14 @@ gst_cam_control_face_track (GstCamcontrol * camctl, const GstStructure * s)
 
   x = fx + fw * 0.5;
   y = fy + fh * 0.5;
+  z = 0;
 
-  g_print ("camctl: (%d, %d)\n", x, y);
+  if (camctl->controller) {
+    gst_cam_controller_move (camctl->controller, x, y);
+    gst_cam_controller_zoom (camctl->controller, z);
+  } else {
+    g_print ("camctl: (%d, %d)\n", x, y);
+  }
 }
 
 static gboolean
@@ -240,12 +384,21 @@ static void
 gst_cam_control_class_init (GstCamcontrolClass * klass)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
-  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GstBaseTransformClass *transform_class = GST_BASE_TRANSFORM_CLASS (klass);
 
-  gobject_class->finalize = GST_DEBUG_FUNCPTR (gst_cam_control_finalize);
-  gobject_class->set_property = gst_cam_control_set_property;
-  gobject_class->get_property = gst_cam_control_get_property;
+  object_class->finalize = GST_DEBUG_FUNCPTR (gst_cam_control_finalize);
+  object_class->set_property = gst_cam_control_set_property;
+  object_class->get_property = gst_cam_control_get_property;
+
+  g_object_class_install_property (object_class, PROP_DEVICE,
+      g_param_spec_string ("device", "Device",
+          "PTZ Camera Device", "", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (object_class, PROP_PROTOCOL,
+      g_param_spec_string ("protocol", "Protocol",
+          "PTZ Camera Protocol", "",
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   element_class->send_event = GST_DEBUG_FUNCPTR (gst_cam_control_send_event);
 

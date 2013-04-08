@@ -3,7 +3,9 @@ plugin_LTLIBRARIES = libgstspeakertrack.la
 libgstspeakertrack_la_SOURCES = \
 	gstfacedetect2.c \
 	gstspeakertrack.c \
-	gstcamcontrol.c
+	gstcamcontrol.c \
+	gstcamcontrol_pana.c \
+	gstcamcontrol_visca.c
 
 libgstspeakertrack_la_CXXFLAGS = $(GST_CXXFLAGS) $(OPENCV_CFLAGS)
 libgstspeakertrack_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(OPENCV_CFLAGS) \
