@@ -2383,7 +2383,6 @@ pkgconfig/gstreamer-insertbin-uninstalled.pc
 pkgconfig/gstreamer-basevideo.pc
 pkgconfig/gstreamer-basevideo-uninstalled.pc
 tools/Makefile
-tools/gst-switch/Makefile
 m4/Makefile
 win32/common/config.h
 )

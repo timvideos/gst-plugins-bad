@@ -41,6 +41,8 @@
  * Boston, MA 02110-1301, USA.
  */
 
+/*! @file */
+
 #ifndef __GST_CAM_CONTROL_H__
 #define __GST_CAM_CONTROL_H__
 
@@ -48,7 +50,36 @@
 #include <gst/base/gstbasetransform.h>
 
 G_BEGIN_DECLS
-/* #defines don't like whitespacey bits */
+
+#define GST_TYPE_CAM_CONTROLLER (gst_cam_controller_get_type ())
+#define GST_CAM_CONTROLLER(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), GST_TYPE_CAM_CONTROLLER, GstCamController))
+#define GST_CAM_CONTROLLER_CLASS(class) (G_TYPE_CHECK_CLASS_CAST ((class), GST_TYPE_CAM_CONTROLLER, GstCamControllerClass))
+#define GST_IS_CAM_CONTROLLER(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), GST_TYPE_CAM_CONTROLLER))
+#define GST_IS_CAM_CONTROLLER_CLASS(class) (G_TYPE_CHECK_CLASS_TYPE ((class), GST_TYPE_CAM_CONTROLLER))
+
+typedef struct _GstCamController
+{
+  GObject base;
+} GstCamController;
+
+typedef struct _GstCamControllerClass
+{
+  GObjectClass base_class;
+
+  gboolean (*open) (GstCamController *, const char *dev);
+  void (*close) (GstCamController *);
+
+  gboolean (*move) (GstCamController *, gint x, gint y);
+  gboolean (*zoom) (GstCamController *, gint z);
+} GstCamControllerClass;
+
+typedef gboolean (*GstCamControllerOpenFunc) (GstCamController *, const char *dev);
+typedef void (*GstCamControllerCloseFunc) (GstCamController *);
+typedef gboolean (*GstCamControllerMoveFunc) (GstCamController *, gint x, gint y);
+typedef gboolean (*GstCamControllerZoomFunc) (GstCamController *, gint z);
+
+GType gst_cam_controller_get_type (void);
+
 #define GST_TYPE_CAM_CONTROL \
   (gst_cam_control_get_type())
 #define GST_CAM_CONTROL(obj) \
@@ -59,6 +90,7 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_CAM_CONTROL))
 #define GST_IS_CAM_CONTROL_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_CAM_CONTROL))
+
 typedef struct _GstCamcontrol GstCamcontrol;
 typedef struct _GstCamcontrolClass GstCamcontrolClass;
 
@@ -67,6 +99,10 @@ typedef struct _TrackingFace TrackingFace;
 struct _GstCamcontrol
 {
   GstBaseTransform base;
+
+  const char *device;
+  const char *protocol;
+  GstCamController *controller;
 };
 
 struct _GstCamcontrolClass
