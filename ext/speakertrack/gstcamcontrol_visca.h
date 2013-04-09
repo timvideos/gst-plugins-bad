@@ -28,6 +28,7 @@
 #ifndef __GST_CAM_CONTROLLER_VISCA_H__by_Duzy_Chan__
 #define __GST_CAM_CONTROLLER_VISCA_H__by_Duzy_Chan__ 1
 #include "gstcamcontrol.h"
+#include <termios.h>
 
 #define GST_TYPE_CAM_CONTROLLER_VISCA (gst_cam_controller_visca_get_type ())
 #define GST_CAM_CONTROLLER_VISCA(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), GST_TYPE_CAM_CONTROLLER_VISCA, GstCamControllerVisca))
@@ -38,6 +39,13 @@
 typedef struct _GstCamControllerVisca
 {
   GstCamController base;
+
+  const char *device;
+  struct termios options;
+  gint fd;
+  guint zoom_speed;
+  guint pan_speed;
+  guint tilt_speed;
 } GstCamControllerVisca;
 
 typedef struct _GstCamControllerViscaClass
