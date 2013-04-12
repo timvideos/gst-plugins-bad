@@ -28,6 +28,7 @@
 #ifndef __GST_CAM_CONTROLLER_PANA_H__by_Duzy_Chan__
 #define __GST_CAM_CONTROLLER_PANA_H__by_Duzy_Chan__ 1
 #include "gstcamcontrol.h"
+#include <termios.h>
 
 #define GST_TYPE_CAM_CONTROLLER_PANA (gst_cam_controller_pana_get_type ())
 #define GST_CAM_CONTROLLER_PANA(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), GST_TYPE_CAM_CONTROLLER_PANA, GstCamControllerPana))
@@ -38,6 +39,10 @@
 typedef struct _GstCamControllerPana
 {
   GstCamController base;
+
+  const char *device;
+  struct termios options;
+  gint fd;
 } GstCamControllerPana;
 
 typedef struct _GstCamControllerPanaClass

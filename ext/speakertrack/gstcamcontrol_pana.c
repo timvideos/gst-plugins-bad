@@ -48,9 +48,87 @@
 #endif
 
 #include "gstcamcontrol_pana.h"
+#include <string.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
 
 G_DEFINE_TYPE (GstCamControllerPana, gst_cam_controller_pana,
     GST_TYPE_CAM_CONTROLLER);
+
+#define pana_message_init(a) { {0}, 0, (a) }
+
+typedef struct _pana_message
+{
+  char buffer[64];              // 64 bytes for one command max
+  int len;
+} pana_message;
+
+static void
+pana_message_append (pana_message * msg, char c)
+{
+  msg->buffer[msg->len++] = c;
+}
+
+static void
+pana_message_reset (pana_message * msg)
+{
+  msg->len = 0;
+  bzero (msg->buffer, sizeof (msg->buffer));
+}
+
+static gboolean
+pana_message_send (int fd, const pana_message * msg)
+{
+  int len = 1 + msg->len;
+  char b[32];
+  if (msg->len <= 0 || sizeof (b) <= len) {
+    return FALSE;
+  }
+
+  memcpy (&b[0], msg->buffer, msg->len);
+  if (write (fd, msg->buffer, msg->len) < msg->len) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static gboolean
+pana_message_reply (int fd, pana_message * reply)
+{
+  int available_bytes = 0, n = 0;
+
+  do {
+    ioctl (fd, FIONREAD, &available_bytes);
+    usleep (500);
+  } while (available_bytes == 0);
+
+  do {
+    if (read (fd, &reply->buffer[n], 1) != 1) {
+      return FALSE;
+    }
+    /*
+       if (reply->buffer[n] == PANA_TERMINATOR) {
+       break;
+       }
+     */
+    n += 1;
+    usleep (1);
+  } while (1);
+
+  return TRUE;
+}
+
+static gboolean
+pana_message_send_with_reply (int fd, const pana_message * msg,
+    pana_message * reply)
+{
+  if (!pana_message_send (fd, msg)) {
+    return FALSE;
+  }
+  return pana_message_reply (fd, reply);
+}
 
 static void
 gst_cam_controller_pana_init (GstCamControllerPana * pana)
@@ -64,31 +142,148 @@ gst_cam_controller_pana_finalize (GstCamControllerPana * pana)
       ->finalize (G_OBJECT (pana));
 }
 
-static gboolean
-gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
-{
-  g_print ("pana: open(%s)\n", dev);
-  return FALSE;
-}
-
 static void
 gst_cam_controller_pana_close (GstCamControllerPana * pana)
 {
   g_print ("pana: close()\n");
+
+  if (0 < pana->fd) {
+    close (pana->fd);
+    pana->fd = -1;
+
+    g_free ((void *) pana->device);
+    pana->device = NULL;
+
+    bzero (&pana->options, sizeof (pana->options));
+  }
+}
+
+static gboolean
+gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
+{
+  g_print ("pana: open(%s)\n", dev);
+
+  if (0 < pana->fd) {
+    gst_cam_controller_pana_close (pana);
+  }
+
+  g_free ((void *) pana->device);
+  pana->device = g_strdup (dev);
+  pana->fd = open (dev, O_RDWR | O_NDELAY | O_NOCTTY);
+
+  if (pana->fd == -1) {
+    g_print ("pana: open(%s) error: %s\n", dev, strerror (errno));
+    return FALSE;
+  }
+  //fcntl (pana->fd, F_SETFL, 0);
+  tcgetattr (pana->fd, &pana->options);
+  cfsetispeed (&pana->options, B9600);
+  cfsetospeed (&pana->options, B9600);
+  pana->options.c_cflag &= ~PARENB;     /* No parity  */
+  pana->options.c_cflag &= ~CSTOPB;     /*            */
+  pana->options.c_cflag &= ~CSIZE;      /* 8bit       */
+  pana->options.c_cflag |= CS8; /*            */
+  pana->options.c_cflag &= ~CRTSCTS;    /* No hdw ctl */
+
+  pana->options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);     /* raw input */
+
+  /*
+     pana->options.c_iflag &= ~(INPCK | ISTRIP); // no parity
+     pana->options.c_iflag &= ~(IXON | IXOFF | IXANY); // no soft ctl
+   */
+  pana->options.c_iflag = 0;
+
+  pana->options.c_oflag &= ~OPOST;      /* raw output */
+
+  tcsetattr (pana->fd, TCSANOW, &pana->options);
+  return TRUE;
 }
 
 static gboolean
 gst_cam_controller_pana_move (GstCamControllerPana * pana, gint x, gint y)
 {
+  pana_message msg, reply;
+  char buf[10];
+
   g_print ("pana: move(%d, %d)\n", x, y);
-  return FALSE;
+
+  sprintf (buf, "%02d", 50);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'P');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, '\r');
+  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg, &reply)) {
+    return FALSE;
+  }
+
+  sprintf (buf, "%02d", 50);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'T');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, '\r');
+  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg, &reply)) {
+    return FALSE;
+  }
+
+  sprintf (buf, "%02d%02d", x, y);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'U');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, buf[2]);
+  pana_message_append (&msg, buf[3]);
+  pana_message_append (&msg, '\r');
+
+  return pana_message_send /*_with_reply*/ (pana->fd, &msg, &reply);
 }
 
 static gboolean
 gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint z)
 {
+  pana_message msg, reply;
+  char buf[10];
+
   g_print ("pana: zoom(%d)\n", z);
-  return FALSE;
+
+  sprintf (buf, "%02d", 50);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'Z');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, '\r');
+
+  if (z == 0) {
+  } else
+    (z < 0) {
+    sprintf (buf, "%02d", -z);
+    pana_message_reset (&msg);
+    pana_message_append (&msg, '#');
+    pana_message_append (&msg, 'A');
+    pana_message_append (&msg, 'X');
+    pana_message_append (&msg, 'Z');
+    pana_message_append (&msg, buf[0]);
+    pana_message_append (&msg, buf[1]);
+    pana_message_append (&msg, '\r');
+    }
+  else
+  (0 < z) {
+    sprintf (buf, "%02d", z);
+    pana_message_reset (&msg);
+    pana_message_append (&msg, '#');
+    pana_message_append (&msg, 'A');
+    pana_message_append (&msg, 'Y');
+    pana_message_append (&msg, 'Z');
+    pana_message_append (&msg, buf[0]);
+    pana_message_append (&msg, buf[1]);
+    pana_message_append (&msg, '\r');
+  }
+
+  return pana_message_send_with_reply (pana->fd, &msg, &reply);
 }
 
 static void
