@@ -234,8 +234,10 @@ endif
 
 if USE_OPENCV
 OPENCV_DIR=opencv
+SPEAKERTRACK_DIR = speakertrack
 else
 OPENCV_DIR=
+SPEAKERTRACK_DIR =
 endif
 
 if USE_OPENJPEG
@@ -423,6 +425,7 @@ SUBDIRS=\
 	$(OPENJPEG_DIR) \
 	$(OPUS_DIR) \
 	$(RSVG_DIR) \
+	$(SPEAKERTRACK_DIR) \
 	$(SBC_DIR) \
 	$(SCHRO_DIR) \
 	$(SDL_DIR) \
@@ -483,6 +486,7 @@ DIST_SUBDIRS = \
 	opus \
 	rsvg \
 	resindvd \
+	speakertrack \
 	sbc \
 	schroedinger \
 	sdl \

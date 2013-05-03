@@ -2488,6 +2488,7 @@ ext/opus/Makefile
 ext/rsvg/Makefile
 ext/resindvd/Makefile
 ext/rtmp/Makefile
+ext/speakertrack/Makefile
 ext/sbc/Makefile
 ext/schroedinger/Makefile
 ext/sdl/Makefile
