@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Ole André Vadla Ravnås <oravnas@cisco.com>
+ * Copyright (C) 2009 Ole André Vadla Ravnås <oleavr@soundrop.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -16,6 +16,10 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
+
+/* FIXME 1.x: suppress warnings for deprecated API such as GStaticRecMutex
+ * with newer GLib versions (>= 2.31.0) */
+#define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "miovideosrc.h"
 
@@ -1127,7 +1131,7 @@ gst_mio_video_src_base_init (gpointer gclass)
   gst_element_class_set_metadata (element_class,
       "Video Source (MIO)", "Source/Video",
       "Reads frames from a Mac OS X MIO device",
-      "Ole André Vadla Ravnås <oravnas@cisco.com>");
+      "Ole André Vadla Ravnås <oleavr@soundrop.com>");
 
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&src_template));

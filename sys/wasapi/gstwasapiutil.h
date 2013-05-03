@@ -21,6 +21,9 @@
 #define __GST_WASAPI_UTIL_H__
 
 #include <gst/gst.h>
+#include <gst/audio/audio.h>
+#include <gst/audio/gstaudiosrc.h>
+#include <gst/audio/gstaudiosink.h>
 
 #include <audioclient.h>
 
@@ -30,12 +33,23 @@ gst_wasapi_util_hresult_to_string (HRESULT hr);
 gboolean
 gst_wasapi_util_get_default_device_client (GstElement * element,
                                            gboolean capture,
-                                           guint rate,
-                                           GstClockTime buffer_time,
-                                           GstClockTime period_time,
-                                           DWORD flags,
-                                           IAudioClient ** ret_client,
-                                           GstClockTime * ret_latency);
+                                           IAudioClient ** ret_client);
+
+gboolean gst_wasapi_util_get_render_client (GstElement * element,
+                                            IAudioClient *client,
+                                            IAudioRenderClient ** ret_render_client);
+
+gboolean gst_wasapi_util_get_capture_client (GstElement * element,
+                                             IAudioClient * client,
+                                             IAudioCaptureClient ** ret_capture_client);
+
+gboolean gst_wasapi_util_get_clock (GstElement * element,
+                                    IAudioClient * client,
+                                    IAudioClock ** ret_clock);
+
+void
+gst_wasapi_util_audio_info_to_waveformatex (GstAudioInfo *info,
+                                       WAVEFORMATEXTENSIBLE *format);
 
 #endif /* __GST_WASAPI_UTIL_H__ */
 

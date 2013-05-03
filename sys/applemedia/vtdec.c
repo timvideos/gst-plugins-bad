@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Ole André Vadla Ravnås <oravnas@cisco.com>
+ * Copyright (C) 2010, 2013 Ole André Vadla Ravnås <oleavr@soundrop.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -73,7 +73,7 @@ gst_vtdec_base_init (GstVTDecClass * klass)
 
   gst_element_class_set_metadata (element_class, longname,
       "Codec/Decoder/Video", description,
-      "Ole André Vadla Ravnås <oravnas@cisco.com>");
+      "Ole André Vadla Ravnås <oleavr@soundrop.com>");
 
   g_free (longname);
   g_free (description);
@@ -303,7 +303,7 @@ gst_vtdec_negotiate_downstream (GstVTDec * self)
     return TRUE;
 
   caps = gst_video_info_to_caps (&self->vinfo);
-  result = gst_pad_set_caps (self->srcpad, caps);
+  result = gst_pad_push_event (self->srcpad, gst_event_new_caps (caps));
   gst_caps_unref (caps);
 
   return result;
@@ -361,8 +361,8 @@ gst_vtdec_create_format_description_from_codec_data (GstVTDec * self,
   status =
       self->ctx->cm->
       FigVideoFormatDescriptionCreateWithSampleDescriptionExtensionAtom (NULL,
-      self->details->format_id, self->vinfo.width, self->vinfo.height,
-      'avcC', map.data, map.size, NULL, &fmt_desc);
+      self->details->format_id, self->vinfo.width, self->vinfo.height, 'avcC',
+      map.data, map.size, NULL, &fmt_desc);
 
   gst_buffer_unmap (codec_data, &map);
 
@@ -409,8 +409,10 @@ static void
 gst_vtdec_destroy_session (GstVTDec * self, VTDecompressionSessionRef * session)
 {
   self->ctx->vt->VTDecompressionSessionInvalidate (*session);
-  self->ctx->vt->VTDecompressionSessionRelease (*session);
-  *session = NULL;
+  if (*session != NULL) {
+    CFRelease (*session);
+    *session = NULL;
+  }
 }
 
 static GstFlowReturn

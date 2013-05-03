@@ -24,7 +24,9 @@ libgstdebugutilsbad_la_SOURCES = \
 	gstchopmydata.h \
 	gstcompare.c \
 	gstcompare.h \
-	gstdebugspy.h
+	gstdebugspy.h \
+	gstwatchdog.c \
+	gstwatchdog.h
 
 nodist_libgstdebugutilsbad_la_SOURCES = $(BUILT_SOURCES)
 libgstdebugutilsbad_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
@@ -32,7 +34,7 @@ libgstdebugutilsbad_la_LIBADD = $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS) \
 	-lgstvideo-$(GST_API_VERSION) \
 	$(GST_LIBS)
 libgstdebugutilsbad_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
-libgstdebugutilsbad_la_LIBTOOLFLAGS = --tag=disable-static
+libgstdebugutilsbad_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 
 noinst_HEADERS = fpsdisplaysink.h
 

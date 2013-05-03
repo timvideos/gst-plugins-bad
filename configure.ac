@@ -51,7 +51,7 @@ dnl sets GST_LT_LDFLAGS
 AS_LIBTOOL(GST, 2, 0, 2)
 
 dnl *** required versions of GStreamer stuff ***
-GST_REQ=1.1.0
+GST_REQ=1.1.0.1
 GSTPB_REQ=1.1.0
 
 dnl *** autotools stuff ****
@@ -201,7 +201,7 @@ dnl check for uninstalled plugin directories for unit tests
 AG_GST_CHECK_UNINSTALLED_SETUP([
   AG_GST_CHECK_GST_PLUGINS_GOOD($GST_API_VERSION, [0.11.0])
   AG_GST_CHECK_GST_PLUGINS_UGLY($GST_API_VERSION, [0.11.0])
-  AG_GST_CHECK_GST_PLUGINS_FFMPEG($GST_API_VERSION, [0.11.0])
+  AG_GST_CHECK_GST_PLUGINS_LIBAV($GST_API_VERSION, [0.11.0])
 ])
 
 dnl Check for documentation xrefs
@@ -260,7 +260,7 @@ AC_SUBST(EXIF_CFLAGS)
 AM_CONDITIONAL(USE_EXIF, test "x$HAVE_EXIF" = "xyes")
 
 dnl Orc
-ORC_CHECK([0.4.16])
+ORC_CHECK([0.4.17])
 
 dnl set license and copyright notice
 GST_LICENSE="LGPL"
@@ -278,6 +278,28 @@ dnl set release date/time
 AG_GST_SET_PACKAGE_RELEASE_DATETIME_WITH_NANO([$PACKAGE_VERSION_NANO],
   ["${srcdir}/gst-plugins-bad.doap"],
   [$PACKAGE_VERSION_MAJOR.$PACKAGE_VERSION_MINOR.$PACKAGE_VERSION_MICRO])
+
+dnl build static plugins or not
+AC_MSG_CHECKING([whether to build static plugins or not])
+AC_ARG_ENABLE(
+  static-plugins,
+  AC_HELP_STRING(
+    [--enable-static-plugins],
+    [build static plugins @<:@default=no@:>@]),
+  [AS_CASE(
+    [$enableval], [no], [], [yes], [],
+    [AC_MSG_ERROR([bad value "$enableval" for --enable-static-plugins])])],
+  [enable_static_plugins=no])
+AC_MSG_RESULT([$enable_static_plugins])
+if test "x$enable_static_plugins" = xyes; then
+  AC_DEFINE(GST_PLUGIN_BUILD_STATIC, 1,
+    [Define if static plugins should be built])
+  GST_PLUGIN_LIBTOOLFLAGS=""
+else
+  GST_PLUGIN_LIBTOOLFLAGS="--tag=disable-static"
+fi
+AC_SUBST(GST_PLUGIN_LIBTOOLFLAGS)
+AM_CONDITIONAL(GST_PLUGIN_BUILD_STATIC, test "x$enable_static_plugins" = "xyes")
 
 # set by AG_GST_PARSE_SUBSYSTEM_DISABLES above
 dnl make sure it doesn't complain about unused variables if debugging is disabled
@@ -314,21 +336,20 @@ AG_GST_DEFAULT_ELEMENTS
 dnl *** plug-ins to include ***
 dnl Non ported plugins (non-dependant, then dependant)
 dnl Make sure you have a space before and after all plugins
-GST_PLUGINS_NONPORTED=" aiff \
- cdxaparse \
+GST_PLUGINS_NONPORTED=" cdxaparse \
  dccp faceoverlay \
  hdvparse ivfparse jp2kdecimator \
- kate librfb \
+ librfb \
  mve mythtv nsf nuvdemux \
  patchdetect real \
- sdi stereo tta videofilters \
+ sdi stereo tta \
  videomeasure videosignal vmnc \
- decklink fbdev linsys vcd \
- apexsink cdaudio cog dc1394 dirac directfb \
+ linsys vcd \
+ apexsink cdaudio dc1394 dirac directfb \
  gsettings ladspa \
- musepack musicbrainz nas neon ofa openal rsvg sdl sndfile timidity \
+ musepack musicbrainz nas neon ofa openal sdl sndfile timidity \
  directdraw direct3d9 acm wininet \
- wildmidi xvid lv2 teletextdec sndio uvch264 wasapi"
+ xvid lv2 teletextdec sndio osx_video quicktime"
 AC_SUBST(GST_PLUGINS_NONPORTED)
 
 dnl these are all the gst plug-ins, compilable without additional libs
@@ -346,7 +367,6 @@ AG_GST_CHECK_PLUGIN(coloreffects)
 AG_GST_CHECK_PLUGIN(dataurisrc)
 AG_GST_CHECK_PLUGIN(dccp)
 AG_GST_CHECK_PLUGIN(debugutils)
-AG_GST_CHECK_PLUGIN(dtmf)
 AG_GST_CHECK_PLUGIN(dvbsuboverlay)
 AG_GST_CHECK_PLUGIN(dvdspu)
 AG_GST_CHECK_PLUGIN(faceoverlay)
@@ -358,15 +378,16 @@ AG_GST_CHECK_PLUGIN(gaudieffects)
 AG_GST_CHECK_PLUGIN(geometrictransform)
 AG_GST_CHECK_PLUGIN(gdp)
 AG_GST_CHECK_PLUGIN(hdvparse)
-AG_GST_CHECK_PLUGIN(hls)
 AG_GST_CHECK_PLUGIN(id3tag)
 AG_GST_CHECK_PLUGIN(inter)
 AG_GST_CHECK_PLUGIN(interlace)
 AG_GST_CHECK_PLUGIN(ivfparse)
+AG_GST_CHECK_PLUGIN(ivtc)
 AG_GST_CHECK_PLUGIN(jp2kdecimator)
 AG_GST_CHECK_PLUGIN(jpegformat)
 AG_GST_CHECK_PLUGIN(librfb)
 AG_GST_CHECK_PLUGIN(liveadder)
+AG_GST_CHECK_PLUGIN(midi)
 AG_GST_CHECK_PLUGIN(mpegdemux)
 AG_GST_CHECK_PLUGIN(mpegtsdemux)
 AG_GST_CHECK_PLUGIN(mpegtsmux)
@@ -396,6 +417,7 @@ AG_GST_CHECK_PLUGIN(videoparsers)
 AG_GST_CHECK_PLUGIN(videosignal)
 AG_GST_CHECK_PLUGIN(vmnc)
 AG_GST_CHECK_PLUGIN(y4m)
+AG_GST_CHECK_PLUGIN(yadif)
 
 dnl *** plug-ins to exclude ***
 
@@ -422,6 +444,167 @@ if test "x$HAVE_PTHREAD_H" = "xyes"; then
 else
   AG_GST_DISABLE_PLUGIN(dccp)
 fi
+
+dnl *** gst-libs/gst/egl ***
+AC_ARG_WITH([egl-window-system],
+              AS_HELP_STRING([--with-egl-window-system],[EGL window system to use (x11, mali-fb, rpi, ios, none)]),
+              [EGL_WINDOW_SYSTEM="$withval"],
+              [EGL_WINDOW_SYSTEM="auto"])
+
+if test x"$EGL_WINDOW_SYSTEM" = x"auto"; then
+  dnl Mali
+  old_LIBS=$LIBS
+  old_CFLAGS=$CFLAGS
+  LIBS="$LIBS -lUMP $EGL_LIBS"
+  CFLAGS="$CFLAGS $EGL_CFLAGS"
+  AC_CHECK_LIB([Mali], [mali_image_create], [EGL_WINDOW_SYSTEM="mali-fb"], [EGL_WINDOW_SYSTEM="auto"])
+  LIBS=$old_LIBS
+  CFLAGS=$old_CFLAGS
+
+  dnl RPi
+  if test x"$EGL_WINDOW_SYSTEM" = x"auto"; then
+      old_LIBS=$LIBS
+      old_CFLAGS=$CFLAGS
+      LIBS="$LIBS -lvcos -lvchiq_arm"
+      CFLAGS="$CFLAGS"
+      AC_CHECK_LIB([bcm_host], [bcm_host_init],
+        [
+          LIBS="$LIBS -lbcm_host"
+          AC_CHECK_HEADER([bcm_host.h], [EGL_WINDOW_SYSTEM="rpi"], [EGL_WINDOW_SYSTEM="auto"])
+      ])
+      LIBS=$old_LIBS
+      CFLAGS=$old_CFLAGS
+  fi
+
+  if test x"$EGL_WINDOW_SYSTEM" = x"auto"; then
+      if test x"$HAVE_X11" = x"yes"; then
+        EGL_WINDOW_SYSTEM="x11"
+      fi
+  fi
+
+  if test x"$EGL_WINDOW_SYSTEM" = x"auto"; then
+    if test x"$HAVE_IOS" = x"yes"; then
+      EGL_WINDOW_SYSTEM="ios"
+    fi
+  fi
+
+  if test x"$EGL_WINDOW_SYSTEM" = x"auto"; then
+    EGL_WINDOW_SYSTEM="none"
+  fi
+fi
+
+case "$EGL_WINDOW_SYSTEM" in
+  x11|none)
+    PKG_CHECK_MODULES(EGL, egl, HAVE_EGL="yes", [
+      HAVE_EGL="no"
+      old_LIBS=$LIBS
+      old_CFLAGS=$CFLAGS
+      
+      AC_CHECK_LIB([EGL], [eglGetProcAddress],
+        [
+          AC_CHECK_HEADER([EGL/egl.h],
+            [
+              HAVE_EGL="yes"
+              EGL_LIBS="-lEGL"
+              EGL_CFLAGS=""
+            ]
+          )
+        ]
+      )
+      
+      LIBS=$old_LIBS
+      CFLAGS=$old_CFLAGS
+    ])
+      
+    if test x"$HAVE_EGL" = x"yes" -a x"$EGL_WINDOW_SYSTEM" = x"x11"; then
+      if test x"$HAVE_X11" != x"yes"; then
+        AC_MSG_ERROR([libX11 not found and is required for EGL X11 window system])
+      else
+        AC_DEFINE(USE_EGL_X11, [1], [Use X11 EGL window system])
+        EGL_CFLAGS="$EGL_CFLAGS $X11_CFLAGS"
+        EGL_LIBS="$EGL_LIBS $X11_LIBS"
+      fi
+    fi
+    ;;
+  mali-fb)
+    dnl FIXME: Mali EGL depends on GLESv1 or GLESv2
+    HAVE_EGL="no"
+    old_LIBS=$LIBS
+    old_CFLAGS=$CFLAGS
+    AC_CHECK_HEADER([EGL/fbdev_window.h],
+      [
+        LIBS="$LIBS -lUMP"
+        AC_CHECK_LIB([Mali], [mali_image_create],
+          [
+            LIBS="$LIBS -lMali"
+            AC_CHECK_LIB([GLESv2], [glEnable],
+              [
+                AC_CHECK_HEADER([GLES2/gl2.h],
+                  [
+                    AC_CHECK_LIB([EGL], [eglGetProcAddress],
+                      [
+                        AC_CHECK_HEADER([EGL/egl.h],
+                          [
+                            HAVE_EGL="yes"
+                            EGL_LIBS="-lGLESv2 -lEGL -lMali -lUMP"
+                            EGL_CFLAGS=""
+                            AC_DEFINE(USE_EGL_MALI_FB, [1], [Use Mali FB EGL window system])
+                          ])
+                      ])
+                  ])
+              ])
+          ])
+      ])
+    LIBS=$old_LIBS
+    CFLAGS=$old_CFLAGS
+    ;;
+  rpi)
+    old_LIBS=$LIBS
+    old_CFLAGS=$CFLAGS
+
+    dnl FIXME: EGL of RPi depends on GLESv1 or GLESv2
+    dnl FIXME: GLESv2 of RPi depends on EGL... WTF!
+    LIBS="$LIBS -lvcos -lvchiq_arm"
+    AC_CHECK_LIB([bcm_host], [bcm_host_init],
+      [
+        LIBS="$LIBS -lbcm_host"
+        AC_CHECK_HEADER(bcm_host.h,
+          [
+            LIBS="$LIBS -lGLESv2"
+            AC_CHECK_LIB([EGL], [eglGetProcAddress],
+              [
+                LIBS="$LIBS -lEGL"
+                AC_CHECK_HEADER([EGL/egl.h],
+                  [
+                    AC_CHECK_LIB([GLESv2], [glEnable],
+                      [
+                        AC_CHECK_HEADER([GLES2/gl2.h],
+                          [
+                            HAVE_EGL="yes"
+                            EGL_LIBS="-lGLESv2 -lEGL -lbcm_host -lvcos -lvchiq_arm"
+                            EGL_CFLAGS=""
+                            AC_DEFINE(USE_EGL_RPI, [1], [Use RPi EGL window system])
+                        ])
+                    ])
+                ])
+            ])
+        ])
+    ])
+
+    LIBS=$old_LIBS
+    CFLAGS=$old_CFLAGS
+    ;;
+  ios)
+    HAVE_EGLGLES="yes"
+    ;;
+  *)
+    AC_MSG_ERROR([invalid EGL window system specified])
+    ;;
+esac
+
+AC_SUBST(EGL_LIBS)
+AC_SUBST(EGL_CFLAGS)
+AM_CONDITIONAL(HAVE_EGL, test x"$HAVE_EGL" = x"yes")
 
 dnl *** sys plug-ins ***
 
@@ -678,10 +861,8 @@ case "$host" in
     HAVE_APPLE_MEDIA="no"
     ;;
 esac
-HAVE_IOS="no"
-if test "x$HAVE_APPLE_MEDIA" = "xyes"; then
-  AC_CHECK_HEADER(MobileCoreServices/MobileCoreServices.h, HAVE_IOS="yes", HAVE_IOS="no", [-])
-fi
+
+AC_CHECK_HEADER(MobileCoreServices/MobileCoreServices.h, HAVE_IOS="yes", HAVE_IOS="no", [-])
 
 AM_CONDITIONAL(HAVE_IOS, test "x$HAVE_IOS" = "xyes")
 if test "x$HAVE_IOS" = "xyes"; then
@@ -691,11 +872,12 @@ fi
 dnl *** bluez ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_BLUEZ, true)
 AG_GST_CHECK_FEATURE(BLUEZ, [Bluez], bluez, [
-  dnl FIXME: we should be able to replace this with the GLib DBus stuff
-  PKG_CHECK_MODULES([DBUS], [dbus-1], [HAVE_BLUEZ=yes], [HAVE_BLUEZ=no])
-
-  AC_MSG_NOTICE([Disabling bluez plugin for now, does not work yet])
-  HAVE_BLUEZ=no
+  PKG_CHECK_MODULES([BLUEZ], [bluez < 5.0], [
+    dnl FIXME: we should be able to replace this with the GLib DBus stuff
+    PKG_CHECK_MODULES([DBUS], [dbus-1], [HAVE_BLUEZ=yes], [HAVE_BLUEZ=no])
+  ], [
+    HAVE_BLUEZ=no
+  ])
 ])
 
 dnl *** OS X videosrc ***
@@ -832,7 +1014,7 @@ dnl *** UVC H264 ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_UVCH264, true)
 AG_GST_CHECK_FEATURE(UVCH264, [UVC H264], uvch264, [
   AC_CHECK_HEADER(linux/uvcvideo.h, HAVE_UVCVIDEO_H=yes, HAVE_UVCVIDEO_H=no)
-  AG_GST_PKG_CHECK_MODULES(GST_VIDEO, gstreamer-video-0.10 >= 0.10.36)
+  AG_GST_PKG_CHECK_MODULES(GST_VIDEO, gstreamer-video-1.0)
   PKG_CHECK_MODULES(G_UDEV, gudev-1.0 , [
           AC_DEFINE([HAVE_GUDEV], 1, [Define if gudev is installed])
           HAVE_GUDEV="yes" ],
@@ -972,16 +1154,6 @@ AG_GST_CHECK_FEATURE(CHROMAPRINT, [chromaprint], chromaprint, [
   ])
   AC_SUBST(CHROMAPRINT_CFLAGS)
   AC_SUBST(CHROMAPRINT_LIBS)
-])
-
-dnl *** Cog ***
-translit(dnm, m, l) AM_CONDITIONAL(USE_COG, true)
-AG_GST_CHECK_FEATURE(COG, [Cog plugin], cog, [
-  PKG_CHECK_MODULES(COG, libpng >= 1.2, HAVE_COG="yes", [
-    HAVE_COG="no"
-  ])
-  AC_SUBST(COG_CFLAGS)
-  AC_SUBST(COG_LIBS)
 ])
 
 dnl *** Curl ***
@@ -1198,6 +1370,14 @@ AG_GST_CHECK_FEATURE(GSM, [GSM library], gsmenc gsmdec, [
   AC_SUBST(GSM_LIBS)
 ])
 
+dnl *** fluidSynth ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_FLUIDSYNTH, true)
+AG_GST_CHECK_FEATURE(FLUIDSYNTH, [fluidsynth], fluidsynth, [
+  PKG_CHECK_MODULES(FLUIDSYNTH, fluidsynth >= 1.0, HAVE_FLUIDSYNTH="yes", [
+    HAVE_FLUIDSYNTH="no"
+  ])
+])
+
 dnl *** kate ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_KATE, true)
 AG_GST_CHECK_FEATURE(KATE, [Kate], kate, [
@@ -1250,6 +1430,16 @@ AG_GST_CHECK_FEATURE(LIBMMS, [mms protocol library], libmms, [
   ])
 ])
 AC_SUBST(LIBMMS_LIBS)
+
+
+dnl *** libsrtp ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_SRTP, true)
+AG_GST_CHECK_FEATURE(SRTP, [srtp library], srtp, [
+  HAVE_SRTP="yes"
+  AG_GST_CHECK_LIBHEADER(SRTP, srtp, srtp_init, , srtp/srtp.h,
+    SRTP_LIBS="-lsrtp", HAVE_SRTP="no")
+  AC_SUBST(SRTP_LIBS)
+])
 
 dnl *** linsys ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_LINSYS, true)
@@ -1629,11 +1819,11 @@ AG_GST_CHECK_FEATURE(PVR, [pvrvideosink], pvr, [
 dnl *** rsvg ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_RSVG, true)
 AG_GST_CHECK_FEATURE(RSVG, [rsvg decoder], rsvg, [
-  PKG_CHECK_MODULES(RSVG, librsvg-2.0 >= 2.14 cairo, [
+  PKG_CHECK_MODULES(RSVG, librsvg-2.0 >= 2.36 cairo, [
     HAVE_RSVG="yes"
-    PKG_CHECK_MODULES(RSVG_2_35_0, librsvg-2.0 >= 2.35.0, HAVE_RSVG_2_35_0="yes", HAVE_RSVG_2_35_0="no")
-    if test "x$HAVE_RSVG_2_35_0" = "xyes"; then
-      AC_DEFINE(HAVE_RSVG_2_35_0, [1], [Have RSVG 2.35.0 or newer])
+    PKG_CHECK_MODULES(RSVG_2_36_2, librsvg-2.0 >= 2.36.2, HAVE_RSVG_2_36_2="yes", HAVE_RSVG_2_36_2="no")
+    if test "x$HAVE_RSVG_2_36_2" = "xyes"; then
+      AC_DEFINE(HAVE_RSVG_2_36_2, [1], [Have RSVG 2.36.2 or newer])
     fi
   ], [
     HAVE_RSVG="no"
@@ -1643,87 +1833,31 @@ AG_GST_CHECK_FEATURE(RSVG, [rsvg decoder], rsvg, [
 ])
 
 dnl *** eglgles ***
-AC_ARG_WITH([egl-window-system],
-              AS_HELP_STRING([--with-egl-window-system],[EGL window system to use (x11, mali-fb, none)]),
-              [EGL_WINDOW_SYSTEM="$withval"],
-              [EGL_WINDOW_SYSTEM="none"])
-
 translit(dnm, m, l) AM_CONDITIONAL(USE_EGLGLES, true)
 AG_GST_CHECK_FEATURE(EGLGLES, [eglgles sink], eglgles, [
   HAVE_EGLGLES="no"
 
-  case "$EGL_WINDOW_SYSTEM" in
-    x11|none)
+  if test x"$HAVE_EGL" = x"yes"; then
       PKG_CHECK_MODULES(EGLGLES, egl glesv2, HAVE_EGLGLES="yes", [
         HAVE_EGLGLES="no"
         old_LIBS=$LIBS
         old_CFLAGS=$CFLAGS
+
+        LIBS="$LIBS $EGL_LIBS"
+        CFLAGS="$CFLAGS $EGL_CFLAGS"
         AC_CHECK_LIB([GLESv2], [glEnable],
           [
             AC_CHECK_HEADER([GLES2/gl2.h],
               [
-                AC_CHECK_LIB([EGL], [eglGetProcAddress],
-                  [
-                    AC_CHECK_HEADER([EGL/egl.h],
-                      [
-                        HAVE_EGLGLES="yes"
-                        EGLGLES_LIBS="-lGLESv2 -lEGL"
-                        EGLGLES_CFLAGS=""
-                      ])
-                  ])
+                 HAVE_EGLGLES="yes"
+                 EGLGLES_LIBS="-lGLESv2"
+                 EGLGLES_CFLAGS=""
               ])
           ])
         LIBS=$old_LIBS
         CFLAGS=$old_CFLAGS
       ])
-      
-      if test x"$HAVE_EGLGLES" = x"yes" -a x"$EGL_WINDOW_SYSTEM" = x"x11"; then
-        if test x"$HAVE_X11" != x"yes"; then
-          AC_MSG_ERROR([libX11 not found and is required for EGL X11 window system])
-        else
-          AC_DEFINE(USE_EGL_X11, [1], [Use X11 EGL window system])
-          EGLGLES_CFLAGS="$EGLGLES_CFLAGS $X11_CFLAGS"
-          EGLGLES_LIBS="$EGLGLES_LIBS $X11_LIBS"
-        fi
-      fi
-      ;;
-    mali-fb)
-      HAVE_EGLGLES="no"
-      AC_CHECK_HEADER([EGL/fbdev_window.h],
-        [
-          old_LIBS=$LIBS
-          old_CFLAGS=$CFLAGS
-
-          LIBS="$LIBS -lUMP"
-          AC_CHECK_LIB([Mali], [mali_image_create],
-            [
-              LIBS="$LIBS -lMali"
-              AC_CHECK_LIB([GLESv2], [glEnable],
-                [
-                  AC_CHECK_HEADER([GLES2/gl2.h],
-                    [
-                      AC_CHECK_LIB([EGL], [eglGetProcAddress],
-                        [
-                          AC_CHECK_HEADER([EGL/egl.h],
-                            [
-                              HAVE_EGLGLES="yes"
-                              EGLGLES_LIBS="-lGLESv2 -lEGL -lMali -lUMP"
-                              EGLGLES_CFLAGS=""
-                              AC_DEFINE(USE_EGL_MALI_FB, [1], [Use Mali FB EGL window system])
-                            ])
-                        ])
-                    ])
-                ])
-            ])
-
-          LIBS=$old_LIBS
-          CFLAGS=$old_CFLAGS
-        ])
-      ;;
-    *)
-      AC_MSG_ERROR([invalid EGL window system specified])
-      ;;
-  esac
+  fi
 
   AC_SUBST(EGLGLES_CFLAGS)
   AC_SUBST(EGLGLES_LIBS)
@@ -1872,16 +2006,6 @@ AG_GST_CHECK_FEATURE(GME, [gme decoder], gme, [
   fi
 ])
 
-dnl *** swfdec ***
-translit(dnm, m, l) AM_CONDITIONAL(USE_SWFDEC, true)
-AG_GST_CHECK_FEATURE(SWFDEC, [swfdec plug-in], swfdec, [
-  PKG_CHECK_MODULES(SWFDEC, swfdec-0.3 >= 0.3.6, HAVE_SWFDEC=yes, [
-    HAVE_SWFDEC=no
-  ])
-  AC_SUBST(SWFDEC_CFLAGS)
-  AC_SUBST(SWFDEC_LIBS)
-])
-
 dnl *** XVID ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_XVID, true)
 AG_GST_CHECK_FEATURE(XVID, [xvid plugins], xvid, [
@@ -1987,6 +2111,12 @@ AG_GST_CHECK_FEATURE(VDPAU, [VDPAU], vdpau, [
   fi
 ])
 
+dnl *** sbc ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_SBC, true)
+AG_GST_CHECK_FEATURE(SBC, [SBC bluetooth audio codec], sbc, [
+  AG_GST_PKG_CHECK_MODULES(SBC, [sbc >= 1.0])
+])
+
 dnl *** schroedinger ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_SCHRO, true)
 AG_GST_CHECK_FEATURE(SCHRO, [Schroedinger video codec], schro, [
@@ -2038,6 +2168,12 @@ AG_GST_CHECK_FEATURE(SNDIO, [sndio audio], sndio, [
   fi
 ])
 
+dnl *** hls ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_HLS, true)
+AG_GST_CHECK_FEATURE(HLS, [http live streaming plugin], hls, [
+  PKG_CHECK_MODULES(GNUTLS, gnutls >= 2.11.3, [ HAVE_HLS="yes" ], [ HAVE_HLS="no" ])
+])
+
 else
 
 dnl not building plugins with external dependencies,
@@ -2051,7 +2187,6 @@ AM_CONDITIONAL(USE_BZ2, false)
 AM_CONDITIONAL(USE_CDAUDIO, false)
 AM_CONDITIONAL(USE_CELT, false)
 AM_CONDITIONAL(USE_CHROMAPRINT, false)
-AM_CONDITIONAL(USE_COG, false)
 AM_CONDITIONAL(USE_CURL, false)
 AM_CONDITIONAL(USE_DC1394, false)
 AM_CONDITIONAL(USE_DECKLINK, false)
@@ -2066,7 +2201,9 @@ AM_CONDITIONAL(USE_FAAC, false)
 AM_CONDITIONAL(USE_FAAD, false)
 AM_CONDITIONAL(USE_FBDEV, false)
 AM_CONDITIONAL(USE_FLITE, false)
+AM_CONDITIONAL(USE_FLUIDSYNTH, false)
 AM_CONDITIONAL(USE_GSM, false)
+AM_CONDITIONAL(USE_HLS, false)
 AM_CONDITIONAL(USE_KATE, false)
 AM_CONDITIONAL(USE_TIGER, false)
 AM_CONDITIONAL(USE_LADSPA, false)
@@ -2097,9 +2234,9 @@ AM_CONDITIONAL(USE_SNDFILE, false)
 AM_CONDITIONAL(USE_SOUNDTOUCH, false)
 AM_CONDITIONAL(USE_SPANDSP, false)
 AM_CONDITIONAL(USE_SPC, false)
+AM_CONDITIONAL(USE_SRTP, false)
 AM_CONDITIONAL(USE_GME, false)
 AM_CONDITIONAL(USE_GSETTINGS, false)
-AM_CONDITIONAL(USE_SWFDEC, false)
 AM_CONDITIONAL(USE_XVID, false)
 AM_CONDITIONAL(USE_DVB, false)
 AM_CONDITIONAL(USE_WININET, false)
@@ -2180,7 +2317,7 @@ AC_SUBST(GST_LIB_LDFLAGS)
 
 dnl this really should only contain flags, not libs - they get added before
 dnl whatevertarget_LIBS and -L flags here affect the rest of the linking
-GST_PLUGIN_LDFLAGS="-module -avoid-version -export-symbols-regex '^[_]*gst_plugin_desc.*' $GST_ALL_LDFLAGS"
+GST_PLUGIN_LDFLAGS="-module -avoid-version -export-symbols-regex '^[_]*gst_plugin_.*' $GST_ALL_LDFLAGS"
 AC_SUBST(GST_PLUGIN_LDFLAGS)
 
 dnl *** output files ***
@@ -2207,7 +2344,6 @@ gst/coloreffects/Makefile
 gst/dataurisrc/Makefile
 gst/dccp/Makefile
 gst/debugutils/Makefile
-gst/dtmf/Makefile
 gst/dvbsuboverlay/Makefile
 gst/dvdspu/Makefile
 gst/faceoverlay/Makefile
@@ -2219,15 +2355,16 @@ gst/gaudieffects/Makefile
 gst/geometrictransform/Makefile
 gst/gdp/Makefile
 gst/hdvparse/Makefile
-gst/hls/Makefile
 gst/id3tag/Makefile
 gst/inter/Makefile
 gst/interlace/Makefile
 gst/ivfparse/Makefile
+gst/ivtc/Makefile
 gst/jp2kdecimator/Makefile
 gst/jpegformat/Makefile
 gst/librfb/Makefile
 gst/liveadder/Makefile
+gst/midi/Makefile
 gst/mpegdemux/Makefile
 gst/mpegtsdemux/Makefile
 gst/mpegtsmux/Makefile
@@ -2258,14 +2395,15 @@ gst/videoparsers/Makefile
 gst/videosignal/Makefile
 gst/vmnc/Makefile
 gst/y4m/Makefile
+gst/yadif/Makefile
 gst-libs/Makefile
 gst-libs/gst/Makefile
 gst-libs/gst/basecamerabinsrc/Makefile
+gst-libs/gst/egl/Makefile
 gst-libs/gst/insertbin/Makefile
 gst-libs/gst/interfaces/Makefile
 gst-libs/gst/signalprocessor/Makefile
 gst-libs/gst/codecparsers/Makefile
-gst-libs/gst/video/Makefile
 sys/Makefile
 sys/dshowdecwrapper/Makefile
 sys/acmenc/Makefile
@@ -2291,8 +2429,6 @@ sys/shm/Makefile
 sys/uvch264/Makefile
 sys/vcd/Makefile
 sys/vdpau/Makefile
-sys/vdpau/gstvdp/Makefile
-sys/vdpau/basevideodecoder/Makefile
 sys/pvr2d/Makefile
 sys/wasapi/Makefile
 sys/wininet/Makefile
@@ -2317,7 +2453,6 @@ ext/bz2/Makefile
 ext/cdaudio/Makefile
 ext/celt/Makefile
 ext/chromaprint/Makefile
-ext/cog/Makefile
 ext/curl/Makefile
 ext/dc1394/Makefile
 ext/dirac/Makefile
@@ -2328,7 +2463,9 @@ ext/eglgles/Makefile
 ext/faac/Makefile
 ext/faad/Makefile
 ext/flite/Makefile
+ext/fluidsynth/Makefile
 ext/gsm/Makefile
+ext/hls/Makefile
 ext/kate/Makefile
 ext/ladspa/Makefile
 ext/lv2/Makefile
@@ -2352,19 +2489,20 @@ ext/opus/Makefile
 ext/rsvg/Makefile
 ext/resindvd/Makefile
 ext/rtmp/Makefile
+ext/sbc/Makefile
 ext/schroedinger/Makefile
 ext/sdl/Makefile
 ext/sndfile/Makefile
 ext/soundtouch/Makefile
 ext/spandsp/Makefile
 ext/sndio/Makefile
+ext/srtp/Makefile
 ext/teletextdec/Makefile
 ext/gme/Makefile
 ext/gsettings/Makefile
 ext/gsettings/org.freedesktop.gstreamer.default-elements.gschema.xml
 ext/spc/Makefile
 ext/speakertrack/Makefile
-ext/swfdec/Makefile
 ext/timidity/Makefile
 ext/xvid/Makefile
 ext/zbar/Makefile
@@ -2380,8 +2518,8 @@ pkgconfig/gstreamer-codecparsers.pc
 pkgconfig/gstreamer-codecparsers-uninstalled.pc
 pkgconfig/gstreamer-insertbin.pc
 pkgconfig/gstreamer-insertbin-uninstalled.pc
-pkgconfig/gstreamer-basevideo.pc
-pkgconfig/gstreamer-basevideo-uninstalled.pc
+pkgconfig/gstreamer-egl.pc
+pkgconfig/gstreamer-egl-uninstalled.pc
 tools/Makefile
 m4/Makefile
 win32/common/config.h

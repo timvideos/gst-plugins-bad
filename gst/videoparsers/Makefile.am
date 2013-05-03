@@ -5,6 +5,7 @@ libgstvideoparsersbad_la_SOURCES = plugin.c \
 	gstdiracparse.c dirac_parse.c \
 	gsth264parse.c gstmpegvideoparse.c \
 	gstmpeg4videoparse.c \
+	gstpngparse.c \
 	gstvc1parse.c
 
 libgstvideoparsersbad_la_CFLAGS = \
@@ -21,12 +22,13 @@ libgstvideoparsersbad_la_LIBADD = \
 	$(GST_PLUGINS_BASE_LIBS) -lgstpbutils-$(GST_API_VERSION) -lgstvideo-$(GST_API_VERSION) \
 	$(GST_BASE_LIBS) $(GST_LIBS)
 libgstvideoparsersbad_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
-libgstvideoparsersbad_la_LIBTOOLFLAGS = --tag=disable-static
+libgstvideoparsersbad_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 
 noinst_HEADERS = gsth263parse.h h263parse.h \
 	gstdiracparse.h dirac_parse.h \
 	gsth264parse.h gstmpegvideoparse.h \
 	gstmpeg4videoparse.h \
+	gstpngparse.h \
 	gstvc1parse.h
 
 Android.mk: Makefile.am $(BUILT_SOURCES)

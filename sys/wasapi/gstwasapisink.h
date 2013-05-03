@@ -22,8 +22,6 @@
 
 #include "gstwasapiutil.h"
 
-#include <gst/base/gstbasesink.h>
-
 G_BEGIN_DECLS
 
 #define GST_TYPE_WASAPI_SINK \
@@ -42,12 +40,9 @@ typedef struct _GstWasapiSinkClass GstWasapiSinkClass;
 
 struct _GstWasapiSink
 {
-  GstBaseSink base_sink;
+  GstAudioSink parent;
 
-  guint rate;
-  GstClockTime buffer_time;
-  GstClockTime period_time;
-  GstClockTime latency;
+  GstAudioInfo info;
 
   IAudioClient * client;
   IAudioRenderClient * render_client;
@@ -56,7 +51,7 @@ struct _GstWasapiSink
 
 struct _GstWasapiSinkClass
 {
-  GstBaseSinkClass parent_class;
+  GstAudioSinkClass parent_class;
 };
 
 GType gst_wasapi_sink_get_type (void);

@@ -25,7 +25,16 @@
 #include <kate/kate.h>
 #include <gst/gst.h>
 
-G_BEGIN_DECLS enum
+G_BEGIN_DECLS
+
+typedef enum {
+  GST_KATE_FORMAT_UNDEFINED,
+  GST_KATE_FORMAT_SPU,
+  GST_KATE_FORMAT_TEXT_UTF8,
+  GST_KATE_FORMAT_TEXT_PANGO_MARKUP
+} GstKateFormat;
+
+enum
 {
   ARG_DEC_BASE_0,
   ARG_DEC_BASE_LANGUAGE,
@@ -38,7 +47,8 @@ G_BEGIN_DECLS enum
 typedef struct
 {
   GstEvent * event;
-  gboolean (*handler)(GstPad *, GstEvent *);
+  gboolean (*handler)(GstPad *, GstObject*, GstEvent *);
+  GstObject * parent;
   GstPad *pad;
 } GstKateDecoderBaseQueuedEvent;
 
@@ -95,9 +105,11 @@ extern gboolean gst_kate_decoder_base_convert (GstKateDecoderBase * decoder,
     GstElement * element, GstPad * pad, GstFormat src_fmt, gint64 src_val,
     GstFormat * dest_fmt, gint64 * dest_val);
 extern gboolean gst_kate_decoder_base_sink_query (GstKateDecoderBase * decoder,
-    GstElement * element, GstPad * pad, GstQuery * query);
+    GstElement * element, GstPad * pad, GstObject * parent, GstQuery * query);
 extern gboolean
-gst_kate_util_decoder_base_queue_event (GstKateDecoderBase * decoder, GstEvent * event, gboolean (*handler)(GstPad *, GstEvent *), GstPad * pad);
+gst_kate_util_decoder_base_queue_event (GstKateDecoderBase * decoder,
+    GstEvent * event, gboolean (*handler)(GstPad *, GstObject *, GstEvent *),
+    GstObject * parent, GstPad * pad);
 extern const char *
 gst_kate_util_get_error_message (int ret);
 

@@ -7,10 +7,10 @@ libgstwasapi_la_SOURCES = gstwasapi.c \
 
 libgstwasapi_la_CFLAGS = $(GST_BASE_CFLAGS) $(GST_CFLAGS) -DCOBJMACROS=1
 libgstwasapi_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS) \
-	-lgstaudio-$(GST_MAJORMINOR) -lgstinterfaces-$(GST_MAJORMINOR)  \
+	-lgstaudio-$(GST_API_VERSION) \
 	$(WASAPI_LIBS)
 libgstwasapi_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) 
-libgstwasapi_la_LIBTOOLFLAGS = --tag=disable-static
+libgstwasapi_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 
 noinst_HEADERS = gstwasapisrc.h \
 	gstwasapisink.h \

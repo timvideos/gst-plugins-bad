@@ -28,6 +28,7 @@
 
 #include <string.h>
 #include <gst/base/gstbytereader.h>
+#include <gst/codecparsers/gstmpegvideometa.h>
 
 #include "gstmpegvideoparse.h"
 
@@ -75,6 +76,8 @@ static GstCaps *gst_mpegv_parse_get_caps (GstBaseParse * parse,
     GstCaps * filter);
 static GstFlowReturn gst_mpegv_parse_pre_push_frame (GstBaseParse * parse,
     GstBaseParseFrame * frame);
+static gboolean gst_mpegv_parse_sink_query (GstBaseParse * parse,
+    GstQuery * query);
 
 static void gst_mpegv_parse_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
@@ -164,6 +167,7 @@ gst_mpegv_parse_class_init (GstMpegvParseClass * klass)
   parse_class->get_sink_caps = GST_DEBUG_FUNCPTR (gst_mpegv_parse_get_caps);
   parse_class->pre_push_frame =
       GST_DEBUG_FUNCPTR (gst_mpegv_parse_pre_push_frame);
+  parse_class->sink_query = GST_DEBUG_FUNCPTR (gst_mpegv_parse_sink_query);
 }
 
 static void
@@ -185,6 +189,8 @@ gst_mpegv_parse_reset_frame (GstMpegvParse * mpvparse)
   mpvparse->frame_repeat_count = 0;
   memset (mpvparse->ext_offsets, 0, sizeof (mpvparse->ext_offsets));
   mpvparse->ext_count = 0;
+  mpvparse->slice_count = 0;
+  mpvparse->slice_offset = 0;
 }
 
 static void
@@ -194,12 +200,40 @@ gst_mpegv_parse_reset (GstMpegvParse * mpvparse)
   mpvparse->profile = 0;
   mpvparse->update_caps = TRUE;
   mpvparse->send_codec_tag = TRUE;
+  mpvparse->send_mpeg_meta = TRUE;
 
   gst_buffer_replace (&mpvparse->config, NULL);
   memset (&mpvparse->sequencehdr, 0, sizeof (mpvparse->sequencehdr));
   memset (&mpvparse->sequenceext, 0, sizeof (mpvparse->sequenceext));
   memset (&mpvparse->sequencedispext, 0, sizeof (mpvparse->sequencedispext));
   memset (&mpvparse->pichdr, 0, sizeof (mpvparse->pichdr));
+  memset (&mpvparse->picext, 0, sizeof (mpvparse->picext));
+
+  mpvparse->seqhdr_updated = FALSE;
+  mpvparse->seqext_updated = FALSE;
+  mpvparse->seqdispext_updated = FALSE;
+  mpvparse->picext_updated = FALSE;
+  mpvparse->quantmatrext_updated = FALSE;
+}
+
+static gboolean
+gst_mpegv_parse_sink_query (GstBaseParse * parse, GstQuery * query)
+{
+  gboolean res;
+  GstMpegvParse *mpvparse = GST_MPEGVIDEO_PARSE (parse);
+
+  res = GST_BASE_PARSE_CLASS (parent_class)->sink_query (parse, query);
+
+  if (res && GST_QUERY_TYPE (query) == GST_QUERY_ALLOCATION) {
+    mpvparse->send_mpeg_meta =
+        gst_query_find_allocation_meta (query, GST_MPEG_VIDEO_META_API_TYPE,
+        NULL);
+
+    GST_DEBUG_OBJECT (parse, "Downstream can handle GstMpegVideo GstMeta : %d",
+        mpvparse->send_mpeg_meta);
+  }
+
+  return res;
 }
 
 static gboolean
@@ -269,6 +303,8 @@ gst_mpegv_parse_process_config (GstMpegvParse * mpvparse, GstBuffer * buf,
     return FALSE;
   }
 
+  mpvparse->seqhdr_updated = TRUE;
+
   GST_LOG_OBJECT (mpvparse, "accepting parsed config size %d", size);
 
   /* Set mpeg version, and parse sequence extension */
@@ -281,11 +317,16 @@ gst_mpegv_parse_process_config (GstMpegvParse * mpvparse, GstBuffer * buf,
               map.data, size, offset)) {
         GST_LOG_OBJECT (mpvparse, "Read Sequence Extension");
         mpvparse->config_flags |= FLAG_SEQUENCE_EXT;
-      } else
-          if (gst_mpeg_video_parse_sequence_display_extension
+        mpvparse->seqext_updated = TRUE;
+      } else if (gst_mpeg_video_parse_sequence_display_extension
           (&mpvparse->sequencedispext, map.data, size, offset)) {
         GST_LOG_OBJECT (mpvparse, "Read Sequence Display Extension");
         mpvparse->config_flags |= FLAG_SEQUENCE_DISPLAY_EXT;
+        mpvparse->seqdispext_updated = TRUE;
+      } else if (gst_mpeg_video_parse_quant_matrix_extension
+          (&mpvparse->quantmatrext, map.data, size, offset)) {
+        GST_LOG_OBJECT (mpvparse, "Read Quantization Matrix Extension");
+        mpvparse->quantmatrext_updated = TRUE;
       }
     }
   }
@@ -323,6 +364,8 @@ gst_mpegv_parse_process_config (GstMpegvParse * mpvparse, GstBuffer * buf,
   return TRUE;
 }
 
+/* FIXME : Move these functions to libgstcodecparser for usage by
+ * more elements/code */
 #ifndef GST_DISABLE_GST_DEBUG
 static const gchar *
 picture_start_code_name (guint8 psc)
@@ -382,26 +425,28 @@ picture_type_name (guint8 pct)
 #endif /* GST_DISABLE_GST_DEBUG */
 
 static void
-parse_picture_extension (GstMpegvParse * mpvparse, GstBuffer * buf, guint off)
+parse_packet_extension (GstMpegvParse * mpvparse, GstBuffer * buf, guint off)
 {
-  GstMpegVideoPictureExt ext;
   GstMapInfo map;
 
   gst_buffer_map (buf, &map, GST_MAP_READ);
 
-  if (gst_mpeg_video_parse_picture_extension (&ext, map.data, map.size, off)) {
+  /* FIXME : WE ARE ASSUMING IT IS A *PICTURE* EXTENSION */
+  if (gst_mpeg_video_parse_picture_extension (&mpvparse->picext, map.data,
+          map.size, off)) {
     mpvparse->frame_repeat_count = 1;
 
-    if (ext.repeat_first_field) {
+    if (mpvparse->picext.repeat_first_field) {
       if (mpvparse->sequenceext.progressive) {
-        if (ext.top_field_first)
+        if (mpvparse->picext.top_field_first)
           mpvparse->frame_repeat_count = 5;
         else
           mpvparse->frame_repeat_count = 3;
-      } else if (ext.progressive_frame) {
+      } else if (mpvparse->picext.progressive_frame) {
         mpvparse->frame_repeat_count = 2;
       }
     }
+    mpvparse->picext_updated = TRUE;
   }
 
   gst_buffer_unmap (buf, &map);
@@ -418,8 +463,8 @@ gst_mpegv_parse_process_sc (GstMpegvParse * mpvparse,
 
   g_return_val_if_fail (buf && gst_buffer_get_size (buf) >= 4, FALSE);
 
-  GST_LOG_OBJECT (mpvparse, "process startcode %x (%s)", code,
-      picture_start_code_name (code));
+  GST_LOG_OBJECT (mpvparse, "process startcode %x (%s) offset:%d", code,
+      picture_start_code_name (code), off);
 
   switch (code) {
     case GST_MPEG_VIDEO_PACKET_PICTURE:
@@ -449,11 +494,17 @@ gst_mpegv_parse_process_sc (GstMpegvParse * mpvparse,
       break;
     case GST_MPEG_VIDEO_PACKET_EXTENSION:
       GST_LOG_OBJECT (mpvparse, "startcode is VIDEO PACKET EXTENSION");
-      parse_picture_extension (mpvparse, buf, off);
+      parse_packet_extension (mpvparse, buf, off);
       if (mpvparse->ext_count < G_N_ELEMENTS (mpvparse->ext_offsets))
         mpvparse->ext_offsets[mpvparse->ext_count++] = off;
-      /* fall-through */
+      packet = FALSE;
+      break;
     default:
+      if (GST_MPEG_VIDEO_PACKET_IS_SLICE (code)) {
+        mpvparse->slice_count++;
+        if (mpvparse->slice_offset == 0)
+          mpvparse->slice_offset = off - 4;
+      }
       packet = FALSE;
       break;
   }
@@ -508,6 +559,7 @@ static GstFlowReturn
 gst_mpegv_parse_handle_frame (GstBaseParse * parse,
     GstBaseParseFrame * frame, gint * skipsize)
 {
+  GstFlowReturn flowret = GST_FLOW_OK;
   GstMpegvParse *mpvparse = GST_MPEGVIDEO_PARSE (parse);
   GstBuffer *buf = frame->buffer;
   gboolean ret = FALSE;
@@ -616,10 +668,16 @@ exit:
     res = gst_mpegv_parse_parse_frame (parse, frame);
     if (res == GST_BASE_PARSE_FLOW_DROPPED)
       frame->flags |= GST_BASE_PARSE_FRAME_FLAG_DROP;
-    return gst_base_parse_finish_frame (parse, frame, off);
+    flowret = gst_base_parse_finish_frame (parse, frame, off);
+    /* Reset local information */
+    mpvparse->seqhdr_updated = FALSE;
+    mpvparse->seqext_updated = FALSE;
+    mpvparse->seqdispext_updated = FALSE;
+    mpvparse->picext_updated = FALSE;
+    mpvparse->quantmatrext_updated = FALSE;
   }
 
-  return GST_FLOW_OK;
+  return flowret;
 }
 
 static void
@@ -768,8 +826,6 @@ gst_mpegv_parse_parse_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
   GstMpegvParse *mpvparse = GST_MPEGVIDEO_PARSE (parse);
   GstBuffer *buffer = frame->buffer;
 
-  gst_mpegv_parse_update_src_caps (mpvparse);
-
   if (G_UNLIKELY (mpvparse->pichdr.pic_type == GST_MPEG_VIDEO_PICTURE_TYPE_I))
     GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
   else
@@ -783,6 +839,10 @@ gst_mpegv_parse_parse_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
     GST_BUFFER_DURATION (buffer) = 0;
   }
 
+  if (mpvparse->pic_offset > 4) {
+    gst_base_parse_set_ts_at_offset (parse, mpvparse->pic_offset - 4);
+  }
+
   if (mpvparse->frame_repeat_count
       && GST_CLOCK_TIME_IS_VALID (GST_BUFFER_DURATION (buffer))) {
     GST_BUFFER_DURATION (buffer) =
@@ -792,8 +852,10 @@ gst_mpegv_parse_parse_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
   if (G_UNLIKELY (mpvparse->drop && !mpvparse->config)) {
     GST_DEBUG_OBJECT (mpvparse, "dropping frame as no config yet");
     return GST_BASE_PARSE_FLOW_DROPPED;
-  } else
-    return GST_FLOW_OK;
+  }
+
+  gst_mpegv_parse_update_src_caps (mpvparse);
+  return GST_FLOW_OK;
 }
 
 static GstFlowReturn
@@ -801,6 +863,13 @@ gst_mpegv_parse_pre_push_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
 {
   GstMpegvParse *mpvparse = GST_MPEGVIDEO_PARSE (parse);
   GstTagList *taglist;
+  GstMpegVideoMeta *meta;
+  GstMpegVideoSequenceHdr *seq_hdr = NULL;
+  GstMpegVideoSequenceExt *seq_ext = NULL;
+  GstMpegVideoSequenceDisplayExt *disp_ext = NULL;
+  GstMpegVideoPictureHdr *pic_hdr = NULL;
+  GstMpegVideoPictureExt *pic_ext = NULL;
+  GstMpegVideoQuantMatrixExt *quant_ext = NULL;
 
   /* tag sending done late enough in hook to ensure pending events
    * have already been sent */
@@ -824,6 +893,29 @@ gst_mpegv_parse_pre_push_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
   /* usual clipping applies */
   frame->flags |= GST_BASE_PARSE_FRAME_FLAG_CLIP;
 
+  if (mpvparse->send_mpeg_meta) {
+    if (mpvparse->seqhdr_updated)
+      seq_hdr = &mpvparse->sequencehdr;
+    if (mpvparse->seqext_updated)
+      seq_ext = &mpvparse->sequenceext;
+    if (mpvparse->seqdispext_updated)
+      disp_ext = &mpvparse->sequencedispext;
+    if (mpvparse->picext_updated)
+      pic_ext = &mpvparse->picext;
+    if (mpvparse->quantmatrext_updated)
+      quant_ext = &mpvparse->quantmatrext;
+    pic_hdr = &mpvparse->pichdr;
+
+    GST_DEBUG_OBJECT (mpvparse,
+        "Adding GstMpegVideoMeta (slice_count:%d, slice_offset:%d)",
+        mpvparse->slice_count, mpvparse->slice_offset);
+    meta =
+        gst_buffer_add_mpeg_video_meta (frame->out_buffer ? frame->
+        out_buffer : frame->buffer, seq_hdr, seq_ext, disp_ext, pic_hdr,
+        pic_ext, quant_ext);
+    meta->num_slices = mpvparse->slice_count;
+    meta->slice_offset = mpvparse->slice_offset;
+  }
   return GST_FLOW_OK;
 }
 

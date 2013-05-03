@@ -397,7 +397,8 @@ dequeue_error:
 too_small_inbuf:
   {
     GST_ELEMENT_ERROR (self, STREAM, FORMAT, ("Too large input frames"),
-        ("Maximum size %d, got %d", mfc_inbuf_max_size, map.size));
+        ("Maximum size %d, got %" G_GSIZE_FORMAT, mfc_inbuf_max_size,
+            map.size));
     ret = GST_FLOW_ERROR;
     gst_buffer_unmap (inbuf, &map);
     goto done;
@@ -519,16 +520,30 @@ gst_mfc_dec_fill_outbuf (GstMFCDec * self, GstBuffer * outbuf,
   const guint8 *mfc_outbuf_comps[3] = { NULL, };
   gint i, j, h, w, src_stride, dst_stride;
   guint8 *dst_, *src_;
-  GstMemory *mem;
   GstVideoFrame vframe;
   Fimc *fimc = self->fimc;
   gboolean zerocopy, has_cropping;
 
   memset (&vframe, 0, sizeof (vframe));
 
-  zerocopy = (gst_buffer_n_memory (outbuf) == 1
-      && (mem = gst_buffer_peek_memory (outbuf, 0))
-      && strcmp (mem->allocator->mem_type, "GstEGLImage") == 0);
+  zerocopy = TRUE;
+  /* FIXME: Not 100% correct, we need the memory of each
+   * plane to be contiguous at least */
+  if (GST_VIDEO_INFO_N_PLANES (&state->info) > gst_buffer_n_memory (outbuf)) {
+    zerocopy = FALSE;
+  } else {
+    gint n = gst_buffer_n_memory (outbuf);
+
+    for (i = 0; i < n; i++) {
+      GstMemory *mem = gst_buffer_peek_memory (outbuf, i);
+
+      if (!GST_MEMORY_IS_PHYSICALLY_CONTIGUOUS (mem)) {
+        zerocopy = FALSE;
+        break;
+      }
+    }
+  }
+
   has_cropping = self->has_cropping && (self->width != self->crop_width
       || self->height != self->crop_height);
 
@@ -803,7 +818,7 @@ gst_mfc_dec_dequeue_output (GstMFCDec * self)
 
     g_assert (mfc_outbuf != NULL);
 
-    GST_DEBUG_OBJECT (self, "Got output buffer with ID %d", timestamp.tv_sec);
+    GST_DEBUG_OBJECT (self, "Got output buffer with ID %ld", timestamp.tv_sec);
 
     frame = NULL;
     if (timestamp.tv_sec != -1)
@@ -833,7 +848,7 @@ gst_mfc_dec_dequeue_output (GstMFCDec * self)
 
       outbuf = frame->output_buffer;
     } else {
-      GST_WARNING_OBJECT (self, "Didn't find a frame for ID %d",
+      GST_WARNING_OBJECT (self, "Didn't find a frame for ID %ld",
           timestamp.tv_sec);
 
       outbuf =

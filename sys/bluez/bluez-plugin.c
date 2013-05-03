@@ -24,6 +24,7 @@
 
 #include "gsta2dpsink.h"
 #include "gstavdtpsink.h"
+#include "gstavdtpsrc.h"
 #include <string.h>
 
 static gboolean
@@ -33,6 +34,8 @@ plugin_init (GstPlugin * plugin)
 
   gst_element_register (plugin, "avdtpsink",
       GST_RANK_NONE, GST_TYPE_AVDTP_SINK);
+
+  gst_element_register (plugin, "avdtpsrc", GST_RANK_NONE, GST_TYPE_AVDTP_SRC);
 
   return TRUE;
 }

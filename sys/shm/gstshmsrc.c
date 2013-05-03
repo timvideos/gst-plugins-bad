@@ -156,6 +156,7 @@ gst_shm_src_finalize (GObject * object)
   GstShmSrc *self = GST_SHM_SRC (object);
 
   gst_poll_free (self->poll);
+  g_free (self->socket_path);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -356,10 +357,8 @@ gst_shm_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
   gsb->pipe = self->pipe;
   gst_shm_pipe_inc (self->pipe);
 
-  *outbuf = gst_buffer_new ();
-  gst_buffer_append_memory (*outbuf,
-      gst_memory_new_wrapped (GST_MEMORY_FLAG_READONLY,
-          buf, rv, 0, rv, gsb, free_buffer));
+  *outbuf = gst_buffer_new_wrapped_full (GST_MEMORY_FLAG_READONLY,
+      buf, rv, 0, rv, gsb, free_buffer);
 
   return GST_FLOW_OK;
 }
@@ -444,7 +443,7 @@ gst_shm_pipe_dec (GstShmPipe * pipe)
   }
 
   if (pipe->pipe)
-    sp_close (pipe->pipe);
+    sp_client_close (pipe->pipe);
   GST_OBJECT_UNLOCK (pipe->src);
 
   gst_object_unref (pipe->src);

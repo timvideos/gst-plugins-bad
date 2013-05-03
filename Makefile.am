@@ -82,7 +82,9 @@ CRUFT_FILES = \
 CRUFT_DIRS = \
 	$(top_srcdir)/gst/aacparse \
 	$(top_srcdir)/gst/amrparse \
+	$(top_srcdir)/gst/camerabin \
 	$(top_srcdir)/gst/flacparse \
+	$(top_srcdir)/gst/hls \
 	$(top_srcdir)/gst/imagefreeze \
 	$(top_srcdir)/gst/invtelecine \
 	$(top_srcdir)/gst/mpeg4videoparse \
@@ -94,15 +96,18 @@ CRUFT_DIRS = \
 	$(top_srcdir)/gst/shapewipe \
 	$(top_srcdir)/gst/valve \
 	$(top_srcdir)/gst-libs/gst/baseparse \
+	$(top_srcdir)/gst-libs/gst/video \
 	$(top_srcdir)/tests/examples/scaletempo \
 	$(top_srcdir)/tests/examples/shapewipe \
 	$(top_srcdir)/tests/examples/switch \
 	$(top_srcdir)/tests/examples/jack \
 	$(top_srcdir)/ext/alsaspdif \
 	$(top_srcdir)/ext/amrwbenc \
+	$(top_srcdir)/ext/cog \
 	$(top_srcdir)/ext/ivorbis \
 	$(top_srcdir)/ext/jack \
 	$(top_srcdir)/ext/metadata \
+	$(top_srcdir)/ext/swfdec \
 	$(top_srcdir)/ext/tarkin \
 	$(top_srcdir)/ext/theora \
 	$(top_srcdir)/ext/vp8

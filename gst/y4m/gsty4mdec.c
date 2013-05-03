@@ -196,9 +196,12 @@ gst_y4m_dec_finalize (GObject * object)
 static GstStateChangeReturn
 gst_y4m_dec_change_state (GstElement * element, GstStateChange transition)
 {
+  GstY4mDec *y4mdec;
   GstStateChangeReturn ret;
 
   g_return_val_if_fail (GST_IS_Y4M_DEC (element), GST_STATE_CHANGE_FAILURE);
+
+  y4mdec = GST_Y4M_DEC (element);
 
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
@@ -217,6 +220,11 @@ gst_y4m_dec_change_state (GstElement * element, GstStateChange transition)
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
+      if (y4mdec->pool) {
+        gst_buffer_pool_set_active (y4mdec->pool, FALSE);
+        gst_object_unref (y4mdec->pool);
+      }
+      y4mdec->pool = NULL;
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       break;
@@ -228,36 +236,51 @@ gst_y4m_dec_change_state (GstElement * element, GstStateChange transition)
 }
 
 static GstClockTime
-gst_y4m_dec_frames_to_timestamp (GstY4mDec * y4mdec, int frame_index)
+gst_y4m_dec_frames_to_timestamp (GstY4mDec * y4mdec, gint64 frame_index)
 {
+  if (frame_index == -1)
+    return -1;
+
   return gst_util_uint64_scale (frame_index, GST_SECOND * y4mdec->info.fps_d,
       y4mdec->info.fps_n);
 }
 
-static int
+static gint64
 gst_y4m_dec_timestamp_to_frames (GstY4mDec * y4mdec, GstClockTime timestamp)
 {
+  if (timestamp == -1)
+    return -1;
+
   return gst_util_uint64_scale (timestamp, y4mdec->info.fps_n,
       GST_SECOND * y4mdec->info.fps_d);
 }
 
-static int
+static gint64
 gst_y4m_dec_bytes_to_frames (GstY4mDec * y4mdec, gint64 bytes)
 {
+  if (bytes == -1)
+    return -1;
+
   if (bytes < y4mdec->header_size)
     return 0;
   return (bytes - y4mdec->header_size) / (y4mdec->info.size + 6);
 }
 
-static gint64
-gst_y4m_dec_frames_to_bytes (GstY4mDec * y4mdec, int frame_index)
+static guint64
+gst_y4m_dec_frames_to_bytes (GstY4mDec * y4mdec, gint64 frame_index)
 {
+  if (frame_index == -1)
+    return -1;
+
   return y4mdec->header_size + (y4mdec->info.size + 6) * frame_index;
 }
 
 static GstClockTime
 gst_y4m_dec_bytes_to_timestamp (GstY4mDec * y4mdec, gint64 bytes)
 {
+  if (bytes == -1)
+    return -1;
+
   return gst_y4m_dec_frames_to_timestamp (y4mdec,
       gst_y4m_dec_bytes_to_frames (y4mdec, bytes));
 }
@@ -377,7 +400,49 @@ gst_y4m_dec_parse_header (GstY4mDec * y4mdec, char *header)
   }
 
   gst_video_info_init (&y4mdec->info);
-  gst_video_info_set_format (&y4mdec->info, format, width, height);
+  gst_video_info_set_format (&y4mdec->out_info, format, width, height);
+  y4mdec->info = y4mdec->out_info;
+
+  switch (y4mdec->info.finfo->format) {
+    case GST_VIDEO_FORMAT_I420:
+      y4mdec->info.offset[0] = 0;
+      y4mdec->info.stride[0] = width;
+      y4mdec->info.offset[1] = y4mdec->info.stride[0] * height;
+      y4mdec->info.stride[1] = GST_ROUND_UP_2 (width) / 2;
+      y4mdec->info.offset[2] =
+          y4mdec->info.offset[1] +
+          y4mdec->info.stride[1] * (GST_ROUND_UP_2 (height) / 2);
+      y4mdec->info.stride[2] = GST_ROUND_UP_2 (width) / 2;
+      y4mdec->info.size =
+          y4mdec->info.offset[2] +
+          y4mdec->info.stride[2] * (GST_ROUND_UP_2 (height) / 2);
+      break;
+    case GST_VIDEO_FORMAT_Y42B:
+      y4mdec->info.offset[0] = 0;
+      y4mdec->info.stride[0] = width;
+      y4mdec->info.offset[1] = y4mdec->info.stride[0] * height;
+      y4mdec->info.stride[1] = GST_ROUND_UP_2 (width) / 2;
+      y4mdec->info.offset[2] =
+          y4mdec->info.offset[1] + y4mdec->info.stride[1] * height;
+      y4mdec->info.stride[2] = GST_ROUND_UP_2 (width) / 2;
+      y4mdec->info.size =
+          y4mdec->info.offset[2] + y4mdec->info.stride[2] * height;
+      break;
+    case GST_VIDEO_FORMAT_Y444:
+      y4mdec->info.offset[0] = 0;
+      y4mdec->info.stride[0] = width;
+      y4mdec->info.offset[1] = y4mdec->info.stride[0] * height;
+      y4mdec->info.stride[1] = width;
+      y4mdec->info.offset[2] =
+          y4mdec->info.offset[1] + y4mdec->info.stride[1] * height;
+      y4mdec->info.stride[2] = width;
+      y4mdec->info.size =
+          y4mdec->info.offset[2] + y4mdec->info.stride[2] * height;
+      break;
+    default:
+      g_assert_not_reached ();
+      break;
+  }
 
   switch (interlaced_char) {
     case 0:
@@ -442,6 +507,7 @@ gst_y4m_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
   if (!y4mdec->have_header) {
     gboolean ret;
     GstCaps *caps;
+    GstQuery *query;
 
     if (n_avail < MAX_HEADER_LENGTH)
       return GST_FLOW_OK;
@@ -466,6 +532,78 @@ gst_y4m_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 
     caps = gst_video_info_to_caps (&y4mdec->info);
     ret = gst_pad_set_caps (y4mdec->srcpad, caps);
+
+    query = gst_query_new_allocation (caps, FALSE);
+    y4mdec->video_meta = FALSE;
+
+    if (y4mdec->pool) {
+      gst_buffer_pool_set_active (y4mdec->pool, FALSE);
+      gst_object_unref (y4mdec->pool);
+    }
+    y4mdec->pool = NULL;
+
+    if (gst_pad_peer_query (y4mdec->srcpad, query)) {
+      y4mdec->video_meta =
+          gst_query_find_allocation_meta (query, GST_VIDEO_CROP_META_API_TYPE,
+          NULL);
+
+      /* We only need a pool if we need to do stride conversion for downstream */
+      if (!y4mdec->video_meta && memcmp (&y4mdec->info, &y4mdec->out_info,
+              sizeof (y4mdec->info)) != 0) {
+        GstBufferPool *pool = NULL;
+        GstAllocator *allocator = NULL;
+        GstAllocationParams params;
+        GstStructure *config;
+        guint size, min, max;
+
+        if (gst_query_get_n_allocation_params (query) > 0) {
+          gst_query_parse_nth_allocation_param (query, 0, &allocator, &params);
+        } else {
+          allocator = NULL;
+          gst_allocation_params_init (&params);
+        }
+
+        if (gst_query_get_n_allocation_pools (query) > 0) {
+          gst_query_parse_nth_allocation_pool (query, 0, &pool, &size, &min,
+              &max);
+          size = MAX (size, y4mdec->out_info.size);
+        } else {
+          pool = NULL;
+          size = y4mdec->out_info.size;
+          min = max = 0;
+        }
+
+        if (pool == NULL) {
+          pool = gst_video_buffer_pool_new ();
+        }
+
+        config = gst_buffer_pool_get_config (pool);
+        gst_buffer_pool_config_set_params (config, caps, size, min, max);
+        gst_buffer_pool_config_set_allocator (config, allocator, &params);
+        gst_buffer_pool_set_config (pool, config);
+
+        if (allocator)
+          gst_object_unref (allocator);
+
+        y4mdec->pool = pool;
+      }
+    } else if (memcmp (&y4mdec->info, &y4mdec->out_info,
+            sizeof (y4mdec->info)) != 0) {
+      GstBufferPool *pool;
+      GstStructure *config;
+
+      /* No pool, create our own if we need to do stride conversion */
+      pool = gst_video_buffer_pool_new ();
+      config = gst_buffer_pool_get_config (pool);
+      gst_buffer_pool_config_set_params (config, caps, y4mdec->out_info.size, 0,
+          0);
+      gst_buffer_pool_set_config (pool, config);
+      y4mdec->pool = pool;
+    }
+    if (y4mdec->pool) {
+      gst_buffer_pool_set_active (y4mdec->pool, TRUE);
+    }
+    gst_query_unref (query);
     gst_caps_unref (caps);
     if (!ret) {
       GST_DEBUG_OBJECT (y4mdec, "Couldn't set caps on src pad");
@@ -539,6 +677,52 @@ gst_y4m_dec_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 
     y4mdec->frame_index++;
 
+    if (y4mdec->video_meta) {
+      gst_buffer_add_video_meta_full (buffer, 0, y4mdec->info.finfo->format,
+          y4mdec->info.width, y4mdec->info.height, y4mdec->info.finfo->n_planes,
+          y4mdec->info.offset, y4mdec->info.stride);
+    } else if (memcmp (&y4mdec->info, &y4mdec->out_info,
+            sizeof (y4mdec->info)) != 0) {
+      GstBuffer *outbuf;
+      GstVideoFrame iframe, oframe;
+      gint i, j;
+      gint w, h, istride, ostride;
+      guint8 *src, *dest;
+
+      /* Allocate a new buffer and do stride conversion */
+      g_assert (y4mdec->pool != NULL);
+
+      flow_ret = gst_buffer_pool_acquire_buffer (y4mdec->pool, &outbuf, NULL);
+      if (flow_ret != GST_FLOW_OK) {
+        gst_buffer_unref (buffer);
+        break;
+      }
+
+      gst_video_frame_map (&iframe, &y4mdec->info, buffer, GST_MAP_READ);
+      gst_video_frame_map (&oframe, &y4mdec->out_info, outbuf, GST_MAP_WRITE);
+
+      for (i = 0; i < 3; i++) {
+        w = GST_VIDEO_FRAME_COMP_WIDTH (&iframe, i);;
+        h = GST_VIDEO_FRAME_COMP_HEIGHT (&iframe, i);;
+        istride = GST_VIDEO_FRAME_COMP_STRIDE (&iframe, i);;
+        ostride = GST_VIDEO_FRAME_COMP_STRIDE (&oframe, i);;
+        src = GST_VIDEO_FRAME_COMP_DATA (&iframe, i);
+        dest = GST_VIDEO_FRAME_COMP_DATA (&oframe, i);
+
+        for (j = 0; j < h; j++) {
+          memcpy (dest, src, w);
+
+          dest += ostride;
+          src += istride;
+        }
+      }
+
+      gst_video_frame_unmap (&iframe);
+      gst_video_frame_unmap (&oframe);
+      gst_buffer_unref (buffer);
+      buffer = outbuf;
+    }
+
     flow_ret = gst_pad_push (y4mdec->srcpad, buffer);
     if (flow_ret != GST_FLOW_OK)
       break;
@@ -587,10 +771,8 @@ gst_y4m_dec_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     }
       break;
     case GST_EVENT_EOS:
-      res = gst_pad_push_event (y4mdec->srcpad, event);
-      break;
     default:
-      res = gst_pad_push_event (y4mdec->srcpad, event);
+      res = gst_pad_event_default (pad, parent, event);
       break;
   }
 
@@ -615,7 +797,7 @@ gst_y4m_dec_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
       GstSeekFlags flags;
       GstSeekType start_type, stop_type;
       gint64 start, stop;
-      int framenum;
+      gint64 framenum;
       guint64 byte;
 
       gst_event_parse_seek (event, &rate, &format, &flags, &start_type,
@@ -627,10 +809,18 @@ gst_y4m_dec_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
       }
 
       framenum = gst_y4m_dec_timestamp_to_frames (y4mdec, start);
-      GST_DEBUG ("seeking to frame %d", framenum);
+      GST_DEBUG ("seeking to frame %" G_GINT64_FORMAT, framenum);
+      if (framenum == -1) {
+        res = FALSE;
+        break;
+      }
 
       byte = gst_y4m_dec_frames_to_bytes (y4mdec, framenum);
-      GST_DEBUG ("offset %d", (int) byte);
+      GST_DEBUG ("offset %" G_GUINT64_FORMAT, (guint64) byte);
+      if (byte == -1) {
+        res = FALSE;
+        break;
+      }
 
       gst_event_unref (event);
       event = gst_event_new_seek (rate, GST_FORMAT_BYTES, flags,
@@ -640,7 +830,7 @@ gst_y4m_dec_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
     }
       break;
     default:
-      res = gst_pad_push_event (y4mdec->sinkpad, event);
+      res = gst_pad_event_default (pad, parent, event);
       break;
   }
 

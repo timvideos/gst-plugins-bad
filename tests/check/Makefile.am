@@ -12,8 +12,8 @@ REGISTRY_ENVIRONMENT = \
 TESTS_ENVIRONMENT = \
 	$(REGISTRY_ENVIRONMENT)                                 \
 	GST_PLUGIN_SYSTEM_PATH_1_0=				\
-	GST_PLUGIN_PATH_1_0=$(top_builddir)/gst:$(top_builddir)/sys:$(top_builddir)/ext:$(GST_PLUGINS_FFMPEG_DIR):$(GST_PLUGINS_UGLY_DIR):$(GST_PLUGINS_GOOD_DIR):$(GST_PLUGINS_BASE_DIR):$(GST_PLUGINS_DIR) \
-	GST_PLUGIN_LOADING_WHITELIST="gstreamer@$(GST_PLUGINS_DIR):gst-plugins-base@$(GSTPB_PLUGINS_DIR):gst-plugins-good:gst-plugins-ugly:gst-ffmpeg:gst-plugins-bad@$(top_builddir)" \
+	GST_PLUGIN_PATH_1_0=$(top_builddir)/gst:$(top_builddir)/sys:$(top_builddir)/ext:$(GST_PLUGINS_LIBAV_DIR):$(GST_PLUGINS_UGLY_DIR):$(GST_PLUGINS_GOOD_DIR):$(GST_PLUGINS_BASE_DIR):$(GST_PLUGINS_DIR) \
+	GST_PLUGIN_LOADING_WHITELIST="gstreamer@$(GST_PLUGINS_DIR):gst-plugins-base@$(GSTPB_PLUGINS_DIR):gst-plugins-good:gst-plugins-ugly:gst-libav:gst-plugins-bad@$(top_builddir)" \
 	GST_STATE_IGNORE_ELEMENTS="apexsink camerabin cdaudio dc1394src \
 	    dccpclientsrc dccpclientsink dccpserversrc dccpserversink decklinksrc \
 	    decklinksink dvbsrc dvbbasebin dfbvideosink festival gsettingsvideosrc \
@@ -67,12 +67,6 @@ if USE_EXIF
 check_jifmux = elements/jifmux
 else
 check_jifmux =
-endif
-
-if USE_COG
-check_logoinsert = elements/logoinsert
-else
-check_logoinsert =
 endif
 
 if USE_MPEG2ENC
@@ -130,7 +124,7 @@ check_mimic=
 endif
 
 if HAVE_ORC
-check_orc = orc/cog orc/bayer
+check_orc = orc/bayer
 else
 check_orc =
 endif
@@ -168,7 +162,11 @@ uvch264_dist_data = elements/uvch264demux_data/valid_h264_jpg.mjpg \
 			elements/uvch264demux_data/valid_h264_yuy2.h264 \
 			elements/uvch264demux_data/valid_h264_yuy2.yuy2
 
-
+if USE_SHM
+check_shm=elements/shm
+else
+check_shm=
+endif
 
 VALGRIND_TO_FIX = \
 	elements/mpeg2enc \
@@ -202,18 +200,17 @@ check_PROGRAMS = \
 	$(check_kate)  \
 	$(check_opus)  \
 	$(check_curl) \
+	$(check_shm) \
 	elements/autoconvert \
 	elements/autovideoconvert \
 	elements/asfmux \
 	elements/baseaudiovisualizer \
 	elements/camerabin \
 	elements/dataurisrc \
-	elements/dtmf \
 	elements/gdppay \
 	elements/gdpdepay \
 	$(check_jifmux) \
 	elements/jpegparse \
-	$(check_logoinsert) \
 	elements/h263parse \
 	elements/h264parse \
 	elements/mpegtsmux \
@@ -336,11 +333,9 @@ elements_camerabin_CFLAGS = \
 elements_camerabin_LDADD = \
         $(top_builddir)/gst-libs/gst/interfaces/libgstphotography-@GST_API_VERSION@.la \
         $(top_builddir)/gst-libs/gst/basecamerabinsrc/libgstbasecamerabinsrc-@GST_API_VERSION@.la \
-        -lgstpbutils-$(GST_API_VERSION) \
-        $(GST_PLUGINS_BASE_LIBS) $(GST_BASE_LIBS) $(GST_LIBS) $(LDADD)
+        $(GST_PLUGINS_BASE_LIBS) -lgstpbutils-$(GST_API_VERSION) \
+        $(GST_BASE_LIBS) $(GST_LIBS) $(LDADD)
 elements_camerabin_SOURCES = elements/camerabin.c
-
-elements_dtmf_LDADD = $(GST_BASE_LIBS) $(LDADD) -lgstrtp-@GST_API_VERSION@
 
 elements_jifmux_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(EXIF_CFLAGS) $(AM_CFLAGS)
 elements_jifmux_LDADD = $(GST_PLUGINS_BASE_LIBS) -lgsttag-$(GST_API_VERSION) $(GST_CHECK_LIBS) $(EXIF_LIBS) $(LDADD)
@@ -380,12 +375,6 @@ EXTRA_DIST = gst-plugins-bad.supp $(uvch264_dist_data)
 
 orc_bayer_CFLAGS = $(ORC_CFLAGS)
 orc_bayer_LDADD = $(ORC_LIBS) -lorc-test-0.4
-orc_cog_CFLAGS = $(ORC_CFLAGS)
-orc_cog_LDADD = $(ORC_LIBS) -lorc-test-0.4
-
-orc/cog.c: $(top_srcdir)/ext/cog/gstcogorc.orc
-	$(MKDIR_P) orc
-	$(ORCC) --test -o $@ $<
 
 orc/bayer.c: $(top_srcdir)/gst/bayer/gstbayerorc.orc
 	$(MKDIR_P) orc

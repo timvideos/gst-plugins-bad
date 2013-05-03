@@ -22,12 +22,16 @@ libgstapplemedia_la_OBJCFLAGS =			\
 	$(GST_BASE_CFLAGS)			\
 	$(GST_PLUGINS_BASE_CFLAGS)
 
+if HAVE_IOS
+libgstapplemedia_la_OBJCFLAGS += -fobjc-abi-version=2 -fobjc-legacy-dispatch
+endif
+
 libgstapplemedia_la_LIBADD =			\
 	$(GST_BASE_LIBS)			\
 	$(GST_PLUGINS_BASE_LIBS)		\
 	-lgstvideo-$(GST_API_VERSION)
 
-libgstapplemedia_la_LIBTOOLFLAGS = --tag=disable-static
+libgstapplemedia_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 
 libgstapplemedia_la_LDFLAGS =			\
 	$(GST_PLUGIN_LDFLAGS)			\
@@ -77,6 +81,7 @@ else
 
 libgstapplemedia_la_SOURCES +=			\
 	qtkitvideosrc.m				\
+	vtenc.c 				\
 	vtdec.c 				\
 	mioapi.c
 

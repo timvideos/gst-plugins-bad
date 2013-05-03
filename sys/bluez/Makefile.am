@@ -3,7 +3,9 @@ plugin_LTLIBRARIES = libgstbluez.la
 libgstbluez_la_SOURCES = \
 	bluez-plugin.c \
 	gsta2dpsink.c \
-	gstavdtpsink.c
+	gstavdtpsink.c \
+	gstavdtpsrc.c \
+	gstavdtputil.c
 
 libgstbluez_la_CFLAGS = $(GST_PLUGINS_BAD_CFLAGS) \
 	$(GST_PLUGINS_BASE_CFLAGS) \
@@ -18,9 +20,11 @@ libgstbluez_la_LIBADD = \
 	$(GST_LIBS) \
 	$(DBUS_LIBS)
 libgstbluez_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
-libgstbluez_la_LIBTOOLFLAGS = --tag=disable-static
+libgstbluez_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 
 noinst_HEADERS = \
 	a2dp-codecs.h \
 	gsta2dpsink.h \
-	gstavdtpsink.h
+	gstavdtpsink.h \
+	gstavdtpsrc.h \
+	gstavdtputil.h

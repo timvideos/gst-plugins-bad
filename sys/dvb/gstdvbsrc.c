@@ -473,6 +473,7 @@ gst_dvbsrc_init (GstDvbSrc * object)
   gst_base_src_set_live (GST_BASE_SRC (object), TRUE);
   /* And we wanted timestamped output */
   gst_base_src_set_do_timestamp (GST_BASE_SRC (object), TRUE);
+  gst_base_src_set_format (GST_BASE_SRC (object), GST_FORMAT_TIME);
 
   object->fd_frontend = -1;
   object->fd_dvr = -1;
@@ -911,13 +912,6 @@ gboolean
 gst_dvbsrc_plugin_init (GstPlugin * plugin)
 {
   GST_DEBUG_CATEGORY_INIT (gstdvbsrc_debug, "dvbsrc", 0, "DVB Source Element");
-
-#ifdef ENABLE_NLS
-  GST_DEBUG ("binding text domain %s to locale dir %s", GETTEXT_PACKAGE,
-      LOCALEDIR);
-  bindtextdomain (GETTEXT_PACKAGE, LOCALEDIR);
-  bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
-#endif /* ENABLE_NLS */
 
   return gst_element_register (plugin, "dvbsrc", GST_RANK_NONE,
       GST_TYPE_DVBSRC);

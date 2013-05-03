@@ -120,7 +120,8 @@ enum
 static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("text/plain; text/x-pango-markup; " GST_KATE_SPU_MIME_TYPE)
+    GST_STATIC_CAPS ("text/x-raw, format={ pango-markup, utf8 }; "
+        GST_KATE_SPU_MIME_TYPE)
     );
 
 static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
@@ -135,13 +136,15 @@ static void gst_kate_enc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static void gst_kate_enc_dispose (GObject * object);
 
-static gboolean gst_kate_enc_setcaps (GstPad * pad, GstCaps * caps);
-static GstFlowReturn gst_kate_enc_chain (GstPad * pad, GstBuffer * buf);
+static gboolean gst_kate_enc_setcaps (GstKateEnc * ke, GstCaps * caps);
+static GstFlowReturn gst_kate_enc_chain (GstPad * pad, GstObject * parent,
+    GstBuffer * buf);
 static GstStateChangeReturn gst_kate_enc_change_state (GstElement * element,
     GstStateChange transition);
-static gboolean gst_kate_enc_sink_event (GstPad * pad, GstEvent * event);
-static const GstQueryType *gst_kate_enc_source_query_type (GstPad * pad);
-static gboolean gst_kate_enc_source_query (GstPad * pad, GstQuery * query);
+static gboolean gst_kate_enc_sink_event (GstPad * pad, GstObject * parent,
+    GstEvent * event);
+static gboolean gst_kate_enc_source_query (GstPad * pad, GstObject * parent,
+    GstQuery * query);
 
 #define gst_kate_enc_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE (GstKateEnc, gst_kate_enc, GST_TYPE_ELEMENT,
@@ -240,8 +243,6 @@ gst_kate_enc_init (GstKateEnc * ke)
   gst_element_add_pad (GST_ELEMENT (ke), ke->sinkpad);
 
   ke->srcpad = gst_pad_new_from_static_template (&src_factory, "src");
-  gst_pad_set_query_type_function (ke->srcpad,
-      GST_DEBUG_FUNCPTR (gst_kate_enc_source_query_type));
   gst_pad_set_query_function (ke->srcpad,
       GST_DEBUG_FUNCPTR (gst_kate_enc_source_query));
   gst_element_add_pad (GST_ELEMENT (ke), ke->srcpad);
@@ -252,6 +253,7 @@ gst_kate_enc_init (GstKateEnc * ke)
   ke->latest_end_time = 0;
   ke->language = NULL;
   ke->category = NULL;
+  ke->format = GST_KATE_FORMAT_UNDEFINED;
   ke->granule_rate_numerator = 1000;
   ke->granule_rate_denominator = 1;
   ke->granule_shift = 32;
@@ -502,12 +504,8 @@ gst_kate_enc_set_metadata (GstKateEnc * ke)
 }
 
 static gboolean
-gst_kate_enc_setcaps (GstPad * pad, GstCaps * caps)
+gst_kate_enc_setcaps (GstKateEnc * ke, GstCaps * caps)
 {
-  GstKateEnc *ke;
-
-  ke = GST_KATE_ENC (GST_PAD_PARENT (pad));
-
   GST_LOG_OBJECT (ke, "input caps: %" GST_PTR_FORMAT, caps);
 
   /* One day we could try to automatically set the category based on the
@@ -520,14 +518,23 @@ gst_kate_enc_setcaps (GstPad * pad, GstCaps * caps)
   if (ke->category != NULL) {
     GstStructure *s = gst_caps_get_structure (caps, 0);
 
-    if (gst_structure_has_name (s, "text/plain") ||
-        gst_structure_has_name (s, "text/x-pango-markup")) {
+    if (gst_structure_has_name (s, "text/x-raw")) {
+      const gchar *format;
+
+      format = gst_structure_get_string (s, "format");
+      if (strcmp (format, "utf8") == 0) {
+        ke->format = GST_KATE_FORMAT_TEXT_UTF8;
+      } else if (strcmp (format, "pango-markup") == 0) {
+        ke->format = GST_KATE_FORMAT_TEXT_PANGO_MARKUP;
+      }
+
       if (strcmp (ke->category, "K-SPU") == 0 ||
           strcmp (ke->category, "spu-subtitles") == 0) {
         GST_ELEMENT_WARNING (ke, LIBRARY, SETTINGS, (NULL),
             ("Category set to '%s', but input is text-based.", ke->category));
       }
     } else if (gst_structure_has_name (s, "subpicture/x-dvd")) {
+      ke->format = GST_KATE_FORMAT_SPU;
       if (strcmp (ke->category, "SUB") == 0 ||
           strcmp (ke->category, "subtitles") == 0) {
         GST_ELEMENT_WARNING (ke, LIBRARY, SETTINGS, (NULL),
@@ -595,6 +602,7 @@ gst_kate_enc_send_headers (GstKateEnc * ke)
       }
       kate_packet_clear (&kp);
 
+      GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_HEADER);
       headers = g_list_append (headers, buffer);
     } else if (ret > 0) {
       GST_LOG_OBJECT (ke, "Last header encoded");
@@ -836,9 +844,8 @@ gst_kate_enc_chain_spu (GstKateEnc * ke, GstBuffer * buf)
       }
     }
 #endif
-    GST_DEBUG_OBJECT (ke, "Encoding %ux%u SPU: (%u bytes) from %f to %f",
-        (guint) kbitmap->width, (guint) kbitmap->height,
-        gst_buffer_get_size (buf), t0, t1);
+    GST_DEBUG_OBJECT (ke, "Encoding %zux%zu SPU: (%zu bytes) from %f to %f",
+        kbitmap->width, kbitmap->height, gst_buffer_get_size (buf), t0, t1);
 
     ret = kate_encode_set_region (&ke->k, kregion);
     if (G_UNLIKELY (ret < 0)) {
@@ -905,8 +912,7 @@ gst_kate_enc_chain_spu (GstKateEnc * ke, GstBuffer * buf)
 }
 
 static GstFlowReturn
-gst_kate_enc_chain_text (GstKateEnc * ke, GstBuffer * buf,
-    const char *mime_type)
+gst_kate_enc_chain_text (GstKateEnc * ke, GstBuffer * buf)
 {
   kate_packet kp = { 0 };
   int ret = 0;
@@ -914,10 +920,12 @@ gst_kate_enc_chain_text (GstKateEnc * ke, GstBuffer * buf,
   GstClockTime start = GST_BUFFER_TIMESTAMP (buf);
   GstClockTime stop = GST_BUFFER_TIMESTAMP (buf) + GST_BUFFER_DURATION (buf);
 
-  if (!strcmp (mime_type, "text/x-pango-markup")) {
+  if (ke->format == GST_KATE_FORMAT_TEXT_PANGO_MARKUP) {
     ret = kate_encode_set_markup_type (&ke->k, kate_markup_simple);
-  } else {
+  } else if (ke->format == GST_KATE_FORMAT_TEXT_UTF8) {
     ret = kate_encode_set_markup_type (&ke->k, kate_markup_none);
+  } else {
+    return GST_FLOW_ERROR;
   }
 
   if (G_UNLIKELY (ret < 0)) {
@@ -926,23 +934,22 @@ gst_kate_enc_chain_text (GstKateEnc * ke, GstBuffer * buf,
             gst_kate_util_get_error_message (ret)));
     rflow = GST_FLOW_ERROR;
   } else {
-    const char *text;
-    size_t text_len;
+    GstMapInfo info;
     gboolean need_unmap = TRUE;
     kate_float t0 = start / (double) GST_SECOND;
     kate_float t1 = stop / (double) GST_SECOND;
 
-    text = gst_buffer_map (buf, &text_len, NULL, GST_MAP_READ);
-    if (text == NULL) {
-      text = "";
-      text_len = 0;
+    if (!gst_buffer_map (buf, &info, GST_MAP_READ)) {
+      info.data = NULL;
+      info.size = 0;
       need_unmap = FALSE;
+      GST_WARNING_OBJECT (buf, "Failed to map buffer");
     }
 
     GST_LOG_OBJECT (ke, "Encoding text: %*.*s (%u bytes) from %f to %f",
-        (int) text_len, (int) text_len, GST_BUFFER_DATA (buf),
-        GST_BUFFER_SIZE (buf), t0, t1);
-    ret = kate_encode_text (&ke->k, t0, t1, text, text_len, &kp);
+        (int) info.size, (int) info.size, info.data, (int) info.size, t0, t1);
+    ret = kate_encode_text (&ke->k, t0, t1, (const char *) info.data, info.size,
+        &kp);
     if (G_UNLIKELY (ret < 0)) {
       GST_ELEMENT_ERROR (ke, STREAM, ENCODE, (NULL),
           ("Failed to encode text: %s", gst_kate_util_get_error_message (ret)));
@@ -951,7 +958,7 @@ gst_kate_enc_chain_text (GstKateEnc * ke, GstBuffer * buf,
       rflow = gst_kate_enc_chain_push_packet (ke, &kp, start, stop - start + 1);
     }
     if (need_unmap)
-      gst_buffer_unmap (buf, text, text_len);
+      gst_buffer_unmap (buf, &info);
   }
 
   return rflow;
@@ -961,56 +968,32 @@ gst_kate_enc_chain_text (GstKateEnc * ke, GstBuffer * buf,
  * this function does the actual processing
  */
 static GstFlowReturn
-gst_kate_enc_chain (GstPad * pad, GstBuffer * buf)
+gst_kate_enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
-  GstKateEnc *ke = GST_KATE_ENC (gst_pad_get_parent (pad));
-  GstFlowReturn rflow = GST_FLOW_OK;
-  GstCaps *caps;
-  const gchar *mime_type = NULL;
+  GstKateEnc *ke = GST_KATE_ENC (parent);
+  GstFlowReturn rflow;
 
-  GST_DEBUG_OBJECT (ke, "got packet, %u bytes", gst_buffer_get_size (buf));
+  GST_DEBUG_OBJECT (ke, "got packet, %zu bytes", gst_buffer_get_size (buf));
 
-  /* get the type of the data we're being sent */
-  caps = gst_pad_get_current_caps (pad);
-  if (G_UNLIKELY (caps == NULL)) {
-    GST_WARNING_OBJECT (ke, "No input caps set");
-    rflow = GST_FLOW_NOT_NEGOTIATED;
-  } else {
-    const GstStructure *structure = gst_caps_get_structure (caps, 0);
-    if (structure)
-      mime_type = gst_structure_get_name (structure);
+  /* first push headers if we haven't done that yet */
+  rflow = gst_kate_enc_flush_headers (ke);
 
-    if (mime_type) {
-      GST_LOG_OBJECT (ke, "Packet has MIME type %s", mime_type);
+  if (G_LIKELY (rflow == GST_FLOW_OK)) {
+    /* flush any packet we had waiting */
+    rflow = gst_kate_enc_flush_waiting (ke, GST_BUFFER_TIMESTAMP (buf));
 
-      /* first push headers if we haven't done that yet */
-      rflow = gst_kate_enc_flush_headers (ke);
-
-      if (G_LIKELY (rflow == GST_FLOW_OK)) {
-        /* flush any packet we had waiting */
-        rflow = gst_kate_enc_flush_waiting (ke, GST_BUFFER_TIMESTAMP (buf));
-
-        if (G_LIKELY (rflow == GST_FLOW_OK)) {
-          if (!strcmp (mime_type, GST_KATE_SPU_MIME_TYPE)) {
-            /* encode a kate_bitmap */
-            rflow = gst_kate_enc_chain_spu (ke, buf);
-          } else {
-            /* encode text */
-            rflow = gst_kate_enc_chain_text (ke, buf, mime_type);
-          }
-        }
+    if (G_LIKELY (rflow == GST_FLOW_OK)) {
+      if (ke->format == GST_KATE_FORMAT_SPU) {
+        /* encode a kate_bitmap */
+        rflow = gst_kate_enc_chain_spu (ke, buf);
+      } else {
+        /* encode text */
+        rflow = gst_kate_enc_chain_text (ke, buf);
       }
-    } else {
-      GST_WARNING_OBJECT (ke, "Packet has no MIME type, ignored");
     }
-    gst_caps_unref (caps);
   }
 
   gst_buffer_unref (buf);
-
-  gst_object_unref (ke);
-
-  GST_LOG_OBJECT (ke, "Leaving chain function");
 
   return rflow;
 }
@@ -1077,6 +1060,7 @@ gst_kate_enc_change_state (GstElement * element, GstStateChange transition)
       ke->initialized = TRUE;
       ke->last_timestamp = 0;
       ke->latest_end_time = 0;
+      ke->format = GST_KATE_FORMAT_UNDEFINED;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       break;
@@ -1192,26 +1176,10 @@ gst_kate_enc_convert (GstPad * pad, GstFormat src_fmt, gint64 src_val,
   return res;
 }
 
-#if 1
-static const GstQueryType *
-gst_kate_enc_source_query_type (GstPad * pad)
-{
-  static const GstQueryType types[] = {
-    GST_QUERY_CONVERT,
-    0
-  };
-
-  return types;
-}
-#endif
-
 static gboolean
-gst_kate_enc_source_query (GstPad * pad, GstQuery * query)
+gst_kate_enc_source_query (GstPad * pad, GstObject * parent, GstQuery * query)
 {
-  GstKateEnc *ke;
   gboolean res = FALSE;
-
-  ke = GST_KATE_ENC (gst_pad_get_parent (pad));
 
   GST_DEBUG ("source query %d", GST_QUERY_TYPE (query));
 
@@ -1223,26 +1191,24 @@ gst_kate_enc_source_query (GstPad * pad, GstQuery * query)
 
       gst_query_parse_convert (query, &src_fmt, &src_val, &dest_fmt, &dest_val);
       if (!gst_kate_enc_convert (pad, src_fmt, src_val, &dest_fmt, &dest_val)) {
-        return gst_pad_query_default (pad, query);
+        return gst_pad_query_default (pad, parent, query);
       }
       gst_query_set_convert (query, src_fmt, src_val, dest_fmt, dest_val);
       res = TRUE;
     }
       break;
     default:
-      res = gst_pad_query_default (pad, query);
+      res = gst_pad_query_default (pad, parent, query);
       break;
   }
-
-  gst_object_unref (ke);
 
   return res;
 }
 
 static gboolean
-gst_kate_enc_sink_event (GstPad * pad, GstEvent * event)
+gst_kate_enc_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 {
-  GstKateEnc *ke = GST_KATE_ENC (gst_pad_get_parent (pad));
+  GstKateEnc *ke = GST_KATE_ENC (parent);
   const GstStructure *structure;
   gboolean ret;
 
@@ -1252,7 +1218,7 @@ gst_kate_enc_sink_event (GstPad * pad, GstEvent * event)
       GstCaps *caps;
 
       gst_event_parse_caps (event, &caps);
-      ret = gst_kate_enc_setcaps (pad, caps);
+      ret = gst_kate_enc_setcaps (ke, caps);
       gst_event_unref (event);
       break;
     }
@@ -1359,7 +1325,7 @@ gst_kate_enc_sink_event (GstPad * pad, GstEvent * event)
       } else {
         g_assert_not_reached ();
       }
-      ret = gst_pad_event_default (pad, event);
+      ret = gst_pad_event_default (pad, parent, event);
       break;
 
     case GST_EVENT_EOS:
@@ -1394,15 +1360,14 @@ gst_kate_enc_sink_event (GstPad * pad, GstEvent * event)
           }
         }
       }
-      ret = gst_pad_event_default (pad, event);
+      ret = gst_pad_event_default (pad, parent, event);
       break;
 
     default:
       GST_LOG_OBJECT (ke, "Got unhandled event");
-      ret = gst_pad_event_default (pad, event);
+      ret = gst_pad_event_default (pad, parent, event);
       break;
   }
 
-  gst_object_unref (ke);
   return ret;
 }

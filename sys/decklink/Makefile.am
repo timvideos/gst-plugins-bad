@@ -8,10 +8,9 @@ libgstdecklink_la_CPPFLAGS = \
 	$(DECKLINK_CXXFLAGS)
 libgstdecklink_la_LIBADD = \
 	$(GST_PLUGINS_BASE_LIBS) \
+	-lgstvideo-@GST_API_VERSION@ \
 	$(GST_BASE_LIBS) \
 	$(GST_LIBS) \
-	-lgstvideo-@GST_API_VERSION@ \
-	-lgstinterfaces-@GST_API_VERSION@ \
 	$(DECKLINK_LIBS) \
 	$(LIBM)
 libgstdecklink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
@@ -21,11 +20,11 @@ libgstdecklink_la_LDFLAGS += \
 	-Wl,-framework,CoreFoundation
 endif
 
-libgstdecklink_la_LIBTOOLFLAGS = --tag=disable-static
+libgstdecklink_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 
 libgstdecklink_la_SOURCES = \
-	gstdecklinksrc.cpp \
 	gstdecklinksink.cpp \
+	gstdecklinksrc.cpp \
 	gstdecklink.cpp \
 	capture.cpp
 

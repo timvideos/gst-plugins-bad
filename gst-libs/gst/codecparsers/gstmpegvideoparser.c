@@ -617,14 +617,14 @@ gst_mpeg_video_parse_picture_extension (GstMpegVideoPictureExt * ext,
 
   size -= offset;
 
-  if (size < 4)
+  if (size < 5)
     return FALSE;
 
   gst_bit_reader_init (&br, &data[offset], size);
 
   if (gst_bit_reader_get_bits_uint8_unchecked (&br, 4) !=
       GST_MPEG_VIDEO_PACKET_EXT_PICTURE) {
-    GST_DEBUG ("Not parsing a picture extension");
+    GST_DEBUG ("Extension is not a picture extension");
     return FALSE;
   }
 

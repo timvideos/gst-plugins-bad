@@ -69,13 +69,41 @@ enum
 
 /* class initialization */
 
-#define DEBUG_INIT \
-  GST_DEBUG_CATEGORY_INIT (gst_amc_audio_dec_debug_category, "amcaudiodec", 0, \
-      "Android MediaCodec audio decoder");
-#define parent_class gst_amc_audio_dec_parent_class
+static void gst_amc_audio_dec_class_init (GstAmcAudioDecClass * klass);
+static void gst_amc_audio_dec_init (GstAmcAudioDec * self);
+static void gst_amc_audio_dec_base_init (gpointer g_class);
 
-G_DEFINE_TYPE_WITH_CODE (GstAmcAudioDec, gst_amc_audio_dec,
-    GST_TYPE_AUDIO_DECODER, DEBUG_INIT);
+static GstAudioDecoderClass *parent_class = NULL;
+
+GType
+gst_amc_audio_dec_get_type (void)
+{
+  static volatile gsize type = 0;
+
+  if (g_once_init_enter (&type)) {
+    GType _type;
+    static const GTypeInfo info = {
+      sizeof (GstAmcAudioDecClass),
+      gst_amc_audio_dec_base_init,
+      NULL,
+      (GClassInitFunc) gst_amc_audio_dec_class_init,
+      NULL,
+      NULL,
+      sizeof (GstAmcAudioDec),
+      0,
+      (GInstanceInitFunc) gst_amc_audio_dec_init,
+      NULL
+    };
+
+    _type = g_type_register_static (GST_TYPE_AUDIO_DECODER, "GstAmcAudioDec",
+        &info, 0);
+
+    GST_DEBUG_CATEGORY_INIT (gst_amc_audio_dec_debug_category, "amcaudiodec", 0, "Android MediaCodec audio decoder");
+
+    g_once_init_leave (&type, _type);
+  }
+  return type;
+}
 
 static GstCaps *
 create_sink_caps (const GstAmcCodecInfo * codec_info)
@@ -253,15 +281,49 @@ create_src_caps (const GstAmcCodecInfo * codec_info)
 {
   GstCaps *ret;
 
-  ret = gst_caps_new_simple ("audio/x-raw-int",
+  ret = gst_caps_new_simple ("audio/x-raw",
       "rate", GST_TYPE_INT_RANGE, 1, G_MAXINT,
       "channels", GST_TYPE_INT_RANGE, 1, G_MAXINT,
-      "width", G_TYPE_INT, 16,
-      "depth", G_TYPE_INT, 16,
-      "signed", G_TYPE_BOOLEAN, TRUE,
-      "endianness", G_TYPE_INT, G_BYTE_ORDER, NULL);
+      "format", G_TYPE_STRING, GST_AUDIO_NE(S16), NULL);
 
   return ret;
+}
+
+static void
+gst_amc_audio_dec_base_init (gpointer g_class)
+{
+  GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
+  GstAmcAudioDecClass *amcaudiodec_class = GST_AMC_AUDIO_DEC_CLASS (g_class);
+  const GstAmcCodecInfo *codec_info;
+  GstPadTemplate *templ;
+  GstCaps *caps;
+  gchar *longname;
+
+  codec_info =
+      g_type_get_qdata (G_TYPE_FROM_CLASS (g_class), gst_amc_codec_info_quark);
+  /* This happens for the base class and abstract subclasses */
+  if (!codec_info)
+    return;
+
+  amcaudiodec_class->codec_info = codec_info;
+
+  /* Add pad templates */
+  caps = create_sink_caps (codec_info);
+  templ = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, caps);
+  gst_element_class_add_pad_template (element_class, templ);
+  gst_caps_unref (caps);
+
+  caps = create_src_caps (codec_info);
+  templ = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, caps);
+  gst_element_class_add_pad_template (element_class, templ);
+  gst_caps_unref (caps);
+
+  longname = g_strdup_printf ("Android MediaCodec %s", codec_info->name);
+  gst_element_class_set_metadata (element_class,
+      codec_info->name,
+      "Codec/Decoder/Audio",
+      longname, "Sebastian Dröge <sebastian.droege@collabora.co.uk>");
+  g_free (longname);
 }
 
 static void
@@ -270,11 +332,8 @@ gst_amc_audio_dec_class_init (GstAmcAudioDecClass * klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstAudioDecoderClass *audiodec_class = GST_AUDIO_DECODER_CLASS (klass);
-  GstAmcAudioDecClass *amcaudiodec_class = GST_AMC_AUDIO_DEC_CLASS (klass);
-  const GstAmcCodecInfo *codec_info;
-  GstPadTemplate *templ;
-  GstCaps *caps;
-  gchar *longname;
+
+  parent_class = g_type_class_peek_parent (klass);
 
   gobject_class->finalize = gst_amc_audio_dec_finalize;
 
@@ -289,32 +348,6 @@ gst_amc_audio_dec_class_init (GstAmcAudioDecClass * klass)
   audiodec_class->set_format = GST_DEBUG_FUNCPTR (gst_amc_audio_dec_set_format);
   audiodec_class->handle_frame =
       GST_DEBUG_FUNCPTR (gst_amc_audio_dec_handle_frame);
-
-  codec_info =
-      g_type_get_qdata (G_TYPE_FROM_CLASS (klass), gst_amc_codec_info_quark);
-  /* This happens for the base class and abstract subclasses */
-  if (!codec_info)
-    return;
-
-  amcaudiodec_class->codec_info = codec_info;
-
-  /* Add pad templates */
-  caps = create_sink_caps (codec_info);
-  templ = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, caps);
-  gst_element_class_add_pad_template (element_class, templ);
-  gst_object_unref (templ);
-
-  caps = create_src_caps (codec_info);
-  templ = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, caps);
-  gst_element_class_add_pad_template (element_class, templ);
-  gst_object_unref (templ);
-
-  longname = g_strdup_printf ("Android MediaCodec %s", codec_info->name);
-  gst_element_class_set_metadata (element_class,
-      codec_info->name,
-      "Codec/Decoder/Audio",
-      longname, "Sebastian Dröge <sebastian.droege@collabora.co.uk>");
-  g_free (longname);
 }
 
 static void
@@ -435,7 +468,6 @@ gst_amc_audio_dec_change_state (GstElement * element, GstStateChange transition)
 static gboolean
 gst_amc_audio_dec_set_src_caps (GstAmcAudioDec * self, GstAmcFormat * format)
 {
-  GstCaps *caps;
   gint rate, channels;
   guint32 channel_mask = 0;
   GstAudioChannelPosition to[64];
@@ -470,10 +502,8 @@ gst_amc_audio_dec_set_src_caps (GstAmcAudioDec * self, GstAmcFormat * format)
   gst_audio_info_set_format (&self->info, GST_AUDIO_FORMAT_S16, rate, channels,
       to);
 
-  caps = gst_audio_info_to_caps (&self->info);
-
-  gst_pad_set_caps (GST_AUDIO_DECODER_SRC_PAD (self), caps);
-  gst_caps_unref (caps);
+  if (!gst_audio_decoder_set_output_format (GST_AUDIO_DECODER (self), &self->info))
+    return FALSE;
 
   self->input_caps_changed = FALSE;
 

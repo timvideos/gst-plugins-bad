@@ -66,17 +66,19 @@ enum
 #define DEFAULT_MAX_PAGE_TIMEOUT (0)
 #define DEFAULT_FORCE_END (FALSE)
 
+#define VIDEO_FORMATS GST_VIDEO_OVERLAY_COMPOSITION_BLEND_FORMATS
+
 static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("I420"))
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (VIDEO_FORMATS))
     );
 
 static GstStaticPadTemplate video_sink_factory =
 GST_STATIC_PAD_TEMPLATE ("video_sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("I420"))
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (VIDEO_FORMATS))
     );
 
 static GstStaticPadTemplate text_sink_factory =
@@ -225,6 +227,8 @@ gst_dvbsub_overlay_init (GstDVBSubOverlay * render)
       GST_DEBUG_FUNCPTR (gst_dvbsub_overlay_query_video));
   gst_pad_set_query_function (render->srcpad,
       GST_DEBUG_FUNCPTR (gst_dvbsub_overlay_query_src));
+
+  GST_PAD_SET_PROXY_ALLOCATION (render->video_sinkpad);
 
   gst_element_add_pad (GST_ELEMENT (render), render->srcpad);
   gst_element_add_pad (GST_ELEMENT (render), render->video_sinkpad);
@@ -1049,6 +1053,11 @@ gst_dvbsub_overlay_event_text (GstPad * pad, GstObject * parent,
       break;
     case GST_EVENT_EOS:
       GST_INFO_OBJECT (render, "text EOS");
+      gst_event_unref (event);
+      ret = TRUE;
+      break;
+    case GST_EVENT_CAPS:
+      /* don't want to forward the subtitle caps */
       gst_event_unref (event);
       ret = TRUE;
       break;

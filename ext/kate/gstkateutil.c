@@ -60,19 +60,17 @@ gst_kate_util_set_header_on_caps (GstElement * element, GstCaps * caps,
     GValue value = { 0 };
     GstBuffer *buffer = headers->data;
     g_assert (buffer);
-    GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_IN_CAPS);
     g_value_init (&value, GST_TYPE_BUFFER);
-    /* as in theoraenc, we need to copy to avoid circular references */
     buffer = gst_buffer_copy (buffer);
-    gst_value_set_buffer (&value, buffer);
-    gst_buffer_unref (buffer);
+    GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_HEADER);
+    gst_value_take_buffer (&value, buffer);
     gst_value_array_append_value (&array, &value);
     g_value_unset (&value);
     headers = headers->next;
   }
 
-  gst_structure_set_value (structure, "streamheader", &array);
-  g_value_unset (&array);
+  gst_structure_take_value (structure, "streamheader", &array);
+
   GST_LOG_OBJECT (element, "here are the newly set caps: %" GST_PTR_FORMAT,
       caps);
 
@@ -142,7 +140,8 @@ gst_kate_util_decode_base_reset (GstKateDecoderBase * decoder)
 
 gboolean
 gst_kate_util_decoder_base_queue_event (GstKateDecoderBase * decoder,
-    GstEvent * event, gboolean (*handler) (GstPad *, GstEvent *), GstPad * pad)
+    GstEvent * event, gboolean (*handler) (GstPad *, GstObject *, GstEvent *),
+    GstObject * parent, GstPad * pad)
 {
   gboolean can_be_queued;
 
@@ -163,6 +162,7 @@ gst_kate_util_decoder_base_queue_event (GstKateDecoderBase * decoder,
     item = g_slice_new (GstKateDecoderBaseQueuedEvent);
     if (item) {
       item->event = event;
+      item->parent = parent;
       item->pad = pad;
       item->handler = handler;
       g_queue_push_tail (decoder->event_queue, item);
@@ -199,7 +199,7 @@ gst_kate_util_decoder_base_drain_event_queue (GstKateDecoderBase * decoder)
   while (decoder->event_queue->length) {
     GstKateDecoderBaseQueuedEvent *item = (GstKateDecoderBaseQueuedEvent *)
         g_queue_pop_head (decoder->event_queue);
-    (*item->handler) (item->pad, item->event);
+    (*item->handler) (item->pad, item->parent, item->event);
     g_slice_free (GstKateDecoderBaseQueuedEvent, item);
   }
 }
@@ -250,29 +250,34 @@ gst_kate_util_decoder_base_chain_kate_packet (GstKateDecoderBase * decoder,
   int ret;
   GstFlowReturn rflow = GST_FLOW_OK;
   gboolean is_header;
-  guint8 *data;
-  gsize size;
+  GstMapInfo info;
+  gsize header_size;
   guint8 header[1];
 
-  size = gst_buffer_extract (buf, 0, header, 1);
+  header_size = gst_buffer_extract (buf, 0, header, 1);
 
-  GST_DEBUG_OBJECT (element, "got kate packet, %u bytes, type %02x",
-      gst_buffer_get_size (buf), size == 0 ? -1 : header[0]);
+  GST_DEBUG_OBJECT (element, "got kate packet, %zu bytes, type %02x",
+      gst_buffer_get_size (buf), header_size == 0 ? -1 : header[0]);
 
-  is_header = size > 0 && (header[0] & 0x80);
+  is_header = header_size > 0 && (header[0] & 0x80);
 
   if (!is_header && decoder->tags) {
     /* after we've processed headers, send any tags before processing the data packet */
     GST_DEBUG_OBJECT (element, "Not a header, sending tags for pad %s:%s",
         GST_DEBUG_PAD_NAME (tagpad));
-    gst_element_found_tags_for_pad (element, tagpad, decoder->tags);
+    gst_pad_push_event (tagpad, gst_event_new_tag (decoder->tags));
     decoder->tags = NULL;
   }
 
-  data = gst_buffer_map (buf, &size, NULL, GST_MAP_READ);
-  kate_packet_wrap (&kp, size, data);
-  ret = kate_high_decode_packetin (&decoder->k, &kp, ev);
-  gst_buffer_unmap (buf, data, size);
+  if (gst_buffer_map (buf, &info, GST_MAP_READ)) {
+    kate_packet_wrap (&kp, info.size, info.data);
+    ret = kate_high_decode_packetin (&decoder->k, &kp, ev);
+    gst_buffer_unmap (buf, &info);
+  } else {
+    GST_ELEMENT_ERROR (element, STREAM, DECODE, (NULL),
+        ("Failed to map buffer"));
+    return GST_FLOW_ERROR;
+  }
 
   if (G_UNLIKELY (ret < 0)) {
     GST_ELEMENT_ERROR (element, STREAM, DECODE, (NULL),
@@ -301,9 +306,11 @@ gst_kate_util_decoder_base_chain_kate_packet (GstKateDecoderBase * decoder,
               strcmp (decoder->k.ki->category, "spu-subtitles") == 0) {
             *src_caps = gst_caps_new_empty_simple ("subpicture/x-dvd");
           } else if (decoder->k.ki->text_markup_type == kate_markup_none) {
-            *src_caps = gst_caps_new_empty_simple ("text/plain");
+            *src_caps = gst_caps_new_simple ("text/x-raw", "format",
+                G_TYPE_STRING, "utf8", NULL);
           } else {
-            *src_caps = gst_caps_new_empty_simple ("text/x-pango-markup");
+            *src_caps = gst_caps_new_simple ("text/x-raw", "format",
+                G_TYPE_STRING, "pango-markup", NULL);
           }
           GST_INFO_OBJECT (srcpad, "Setting caps: %" GST_PTR_FORMAT, *src_caps);
           if (!gst_pad_set_caps (srcpad, *src_caps)) {
@@ -378,14 +385,8 @@ gst_kate_util_decoder_base_chain_kate_packet (GstKateDecoderBase * decoder,
             gst_tag_list_unref (old);
 
           if (decoder->initialized) {
-            gst_element_found_tags_for_pad (element, tagpad, decoder->tags);
+            gst_pad_push_event (tagpad, gst_event_new_tag (decoder->tags));
             decoder->tags = NULL;
-          } else {
-            /* Only push them as messages for the time being. *
-             * They will be pushed on the pad once the decoder is initialized */
-            gst_element_post_message (element,
-                gst_message_new_tag (GST_OBJECT (element),
-                    gst_tag_list_copy (decoder->tags)));
           }
         }
         break;
@@ -424,7 +425,7 @@ gst_kate_util_decoder_base_chain_kate_packet (GstKateDecoderBase * decoder,
       if (gst_tag_list_is_empty (evtags))
         gst_tag_list_unref (evtags);
       else
-        gst_element_found_tags_for_pad (element, tagpad, evtags);
+        gst_pad_push_event (tagpad, gst_event_new_tag (evtags));
     }
   }
 #endif
@@ -611,7 +612,7 @@ gst_kate_decoder_base_convert (GstKateDecoderBase * decoder,
 
 gboolean
 gst_kate_decoder_base_sink_query (GstKateDecoderBase * decoder,
-    GstElement * element, GstPad * pad, GstQuery * query)
+    GstElement * element, GstPad * pad, GstObject * parent, GstQuery * query)
 {
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CONVERT:
@@ -622,13 +623,13 @@ gst_kate_decoder_base_sink_query (GstKateDecoderBase * decoder,
       gst_query_parse_convert (query, &src_fmt, &src_val, &dest_fmt, &dest_val);
       if (!gst_kate_decoder_base_convert (decoder, element, pad, src_fmt,
               src_val, &dest_fmt, &dest_val)) {
-        return gst_pad_query_default (pad, query);
+        return gst_pad_query_default (pad, parent, query);
       }
       gst_query_set_convert (query, src_fmt, src_val, dest_fmt, dest_val);
       return TRUE;
     }
     default:
-      return gst_pad_query_default (pad, query);
+      return gst_pad_query_default (pad, parent, query);
   }
 }
 

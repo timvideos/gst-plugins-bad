@@ -225,6 +225,7 @@ gst_raw_parse_set_src_caps (GstRawParse * rp)
   }
 
   rp->negotiated = gst_pad_set_caps (rp->srcpad, caps);
+  gst_caps_unref (caps);
 
   return rp->negotiated;
 }
@@ -670,6 +671,8 @@ gst_raw_parse_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 
       if (segment.format != GST_FORMAT_TIME) {
         gst_event_unref (event);
+
+        segment.format = GST_FORMAT_TIME;
 
         ret =
             gst_raw_parse_convert (rp, segment.format, segment.start,

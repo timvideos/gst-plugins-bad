@@ -1194,7 +1194,7 @@ gst_h264_parse_update_src_caps (GstH264Parse * h264parse, GstCaps * caps)
       }
     }
 
-    if (G_UNLIKELY (modified)) {
+    if (G_UNLIKELY (modified || h264parse->update_caps)) {
       gint fps_num = h264parse->fps_num;
       gint fps_den = h264parse->fps_den;
       gint width, height;
@@ -1295,6 +1295,10 @@ gst_h264_parse_get_timestamp (GstH264Parse * h264parse,
 
   if (!sps) {
     GST_DEBUG_OBJECT (h264parse, "referred SPS invalid");
+    goto exit;
+  } else if (!sps->vui_parameters_present_flag) {
+    GST_DEBUG_OBJECT (h264parse,
+        "unable to compute timestamp: VUI not present");
     goto exit;
   } else if (!sps->vui_parameters.timing_info_present_flag) {
     GST_DEBUG_OBJECT (h264parse,

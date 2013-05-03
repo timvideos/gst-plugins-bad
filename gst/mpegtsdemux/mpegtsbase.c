@@ -503,32 +503,10 @@ mpegts_base_free_program (MpegTSBaseProgram * program)
   g_free (program);
 }
 
-/* FIXME : This is being called by tsdemux::find_timestamps()
- * We need to avoid re-entrant code like that */
-static gboolean
-mpegts_base_stop_program (MpegTSBase * base, MpegTSBaseProgram * program)
-{
-  MpegTSBaseClass *klass = GST_MPEGTS_BASE_GET_CLASS (base);
-
-  GST_DEBUG_OBJECT (base, "program_number : %d", program->program_number);
-
-  if (klass->program_stopped)
-    klass->program_stopped (base, program);
-
-  return TRUE;
-}
-
 void
 mpegts_base_remove_program (MpegTSBase * base, gint program_number)
 {
-  MpegTSBaseProgram *program;
-
   GST_DEBUG_OBJECT (base, "program_number : %d", program_number);
-  program =
-      (MpegTSBaseProgram *) g_hash_table_lookup (base->programs,
-      GINT_TO_POINTER (program_number));
-  if (program)
-    mpegts_base_stop_program (base, program);
 
   g_hash_table_remove (base->programs, GINT_TO_POINTER (program_number));
 }
@@ -681,10 +659,6 @@ mpegts_base_deactivate_program (MpegTSBase * base, MpegTSBaseProgram * program)
   program->active = FALSE;
 
   if (program->pmt_info) {
-    /* Inform subclasses we're deactivating this program */
-    if (klass->program_stopped)
-      klass->program_stopped (base, program);
-
     streams = gst_structure_id_get_value (program->pmt_info, QUARK_STREAMS);
     nbstreams = gst_value_list_get_size (streams);
 
@@ -709,6 +683,10 @@ mpegts_base_deactivate_program (MpegTSBase * base, MpegTSBaseProgram * program)
 
     GST_DEBUG ("program stream_list is now %p", program->stream_list);
   }
+
+  /* Inform subclasses we're deactivating this program */
+  if (klass->program_stopped)
+    klass->program_stopped (base, program);
 }
 
 static void
@@ -1296,13 +1274,8 @@ static gboolean
 remove_each_program (gpointer key, MpegTSBaseProgram * program,
     MpegTSBase * base)
 {
-  MpegTSBaseClass *klass = GST_MPEGTS_BASE_GET_CLASS (base);
-
   /* First deactivate it */
   mpegts_base_deactivate_program (base, program);
-  /* Then remove it */
-  if (klass->program_stopped)
-    klass->program_stopped (base, program);
 
   return TRUE;
 }
@@ -1348,7 +1321,7 @@ mpegts_base_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
         base->packetizer->calculate_offset = TRUE;
         base->packetizer->calculate_skew = FALSE;
       }
-      gst_event_unref (event);
+      res = GST_MPEGTS_BASE_GET_CLASS (base)->push_event (base, event);
       break;
     case GST_EVENT_STREAM_START:
       gst_event_unref (event);
@@ -1491,7 +1464,7 @@ mpegts_base_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 static GstFlowReturn
 mpegts_base_scan (MpegTSBase * base)
 {
-  GstFlowReturn ret;
+  GstFlowReturn ret = GST_FLOW_OK;
   GstBuffer *buf = NULL;
   guint i;
   gboolean done = FALSE;
@@ -1598,6 +1571,7 @@ static void
 mpegts_base_loop (MpegTSBase * base)
 {
   GstFlowReturn ret = GST_FLOW_ERROR;
+
   switch (base->mode) {
     case BASE_MODE_SCANNING:
       /* Find first sync point */

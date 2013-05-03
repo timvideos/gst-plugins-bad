@@ -46,12 +46,6 @@ else
 CHROMAPRINT_DIR=
 endif
 
-if USE_COG
-COG_DIR=cog
-else
-COG_DIR=
-endif
-
 if USE_CURL
 CURL_DIR=curl
 else
@@ -276,6 +270,16 @@ TIMIDITY_DIR=
 endif
 endif
 
+if USE_FLUIDSYNTH
+FLUIDSYNTH_DIR=fluidsynth
+endif
+
+if USE_SBC
+SBC_DIR=sbc
+else
+SBC_DIR=
+endif
+
 if USE_SCHRO
 SCHRO_DIR=schroedinger
 else
@@ -324,16 +328,16 @@ else
 SPC_DIR=
 endif
 
+if USE_SRTP
+SRTP_DIR=srtp
+else
+SRTP_DIR=
+endif
+
 if USE_GME
 GME_DIR=gme
 else
 GME_DIR=
-endif
-
-if USE_SWFDEC
-#SWFDEC_DIR=swfdec
-else
-SWFDEC_DIR=
 endif
 
 if USE_TELETEXTDEC
@@ -368,6 +372,12 @@ endif
 
 SPEAKERTRACK_DIR = speakertrack
 
+if USE_HLS
+HLS_DIR = hls
+else
+HLS_DIR =
+endif
+
 SUBDIRS=\
 	$(VOAACENC_DIR) \
 	$(ASSRENDER_DIR) \
@@ -378,7 +388,6 @@ SUBDIRS=\
 	$(CDAUDIO_DIR) \
 	$(CELT_DIR) \
 	$(CHROMAPRINT_DIR) \
-	$(COG_DIR) \
 	$(CURL_DIR) \
 	$(DC1394_DIR) \
 	$(DIRAC_DIR) \
@@ -390,6 +399,7 @@ SUBDIRS=\
 	$(FAAC_DIR) \
 	$(FAAD_DIR) \
 	$(FLITE_DIR) \
+	$(FLUIDSYNTH_DIR) \
 	$(GSETTINGS_DIR) \
 	$(GSM_DIR) \
 	$(G729_DIR) \
@@ -414,6 +424,7 @@ SUBDIRS=\
 	$(OPENJPEG_DIR) \
 	$(OPUS_DIR) \
 	$(RSVG_DIR) \
+	$(SBC_DIR) \
 	$(SCHRO_DIR) \
 	$(SDL_DIR) \
 	$(SMOOTHWAVE_DIR) \
@@ -424,12 +435,13 @@ SUBDIRS=\
 	$(GME_DIR) \
 	$(SPC_DIR) \
 	$(SPEAKERTRACK_DIR) \
-	$(SWFDEC_DIR) \
+	$(SRTP_DIR) \
 	$(TELETEXTDEC_DIR) \
 	$(TIMIDITY_DIR) \
 	$(XVID_DIR) \
 	$(ZBAR_DIR) \
-	$(RTMP_DIR)
+	$(RTMP_DIR) \
+	$(HLS_DIR)
 
 DIST_SUBDIRS = \
 	assrender \
@@ -438,7 +450,6 @@ DIST_SUBDIRS = \
 	cdaudio \
 	celt \
 	chromaprint \
-	cog \
 	curl \
 	dc1394 \
 	dirac \
@@ -447,8 +458,10 @@ DIST_SUBDIRS = \
 	faac \
 	faad \
 	flite \
+	fluidsynth \
 	gsettings \
 	gsm \
+	hls \
 	ladspa \
 	kate \
 	libmms \
@@ -472,6 +485,7 @@ DIST_SUBDIRS = \
 	opus \
 	rsvg \
 	resindvd \
+	sbc \
 	schroedinger \
 	sdl \
 	sndfile \
@@ -480,8 +494,8 @@ DIST_SUBDIRS = \
 	spandsp \
 	spc \
 	speakertrack \
+	srtp \
 	gme \
-	swfdec \
 	teletextdec \
 	timidity \
 	voaacenc \

@@ -4,8 +4,6 @@ plugin_LTLIBRARIES = libgstvideofiltersbad.la
 #include $(top_srcdir)/common/orc.mak
 
 libgstvideofiltersbad_la_SOURCES = \
-	gstvideofilter2.c \
-	gstvideofilter2.h \
 	gstzebrastripe.c \
 	gstscenechange.c \
 	gstvideofiltersbad.c
@@ -21,7 +19,7 @@ libgstvideofiltersbad_la_LIBADD = \
 	$(ORC_LIBS) \
 	$(LIBM)
 libgstvideofiltersbad_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
-libgstvideofiltersbad_la_LIBTOOLFLAGS = --tag=disable-static
+libgstvideofiltersbad_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 
 noinst_HEADERS = \
 	gstzebrastripe.h \

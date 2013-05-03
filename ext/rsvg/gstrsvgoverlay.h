@@ -21,6 +21,9 @@
 #define __GST_RSVG_OVERLAY_H__
 
 #include <librsvg/rsvg.h>
+#ifndef HAVE_RSVG_2_36_2
+#include <librsvg/rsvg-cairo.h>
+#endif
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideofilter.h>
@@ -45,7 +48,7 @@ struct _GstRsvgOverlay
   GstVideoFilter element;
 
   /* < private > */
-  GStaticMutex rsvg_lock;
+  GMutex rsvg_lock;
 
   RsvgHandle *handle;
 
@@ -62,10 +65,6 @@ struct _GstRsvgOverlay
   int height;
   float width_relative;
   float height_relative;
-
-  GstVideoFormat caps_format;
-  int caps_width;
-  int caps_height;
 
   GstPad *data_sinkpad;
   GstAdapter *adapter;

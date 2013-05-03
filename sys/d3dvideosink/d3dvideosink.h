@@ -52,7 +52,11 @@ struct _GstD3DVideoSink
   GstVideoInfo       info;
   gint               width;
   gint               height;
+  GstBufferPool      *pool;
+  GstBufferPool      *fallback_pool;
+  GstBuffer          *fallback_buffer;
 
+  GstVideoRectangle  crop_rect;
   GstVideoRectangle  render_rect;
 
   GRecMutex    lock;
