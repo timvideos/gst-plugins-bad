@@ -201,14 +201,14 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
 }
 
 static gboolean
-gst_cam_controller_pana_move (GstCamControllerPana * pana, gint x, gint y)
+gst_cam_controller_pana_pan (GstCamControllerPana * pana, gint speed, gint v)
 {
   pana_message msg;             //, reply;
   char buf[10];
 
-  g_print ("pana: move(%d, %d)\n", x, y);
+  g_print ("pana: pan(%d, %d)\n", speed, v);
 
-  sprintf (buf, "%02d", 50);
+  sprintf (buf, "%02d", speed);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'P');
   pana_message_append (&msg, buf[0]);
@@ -218,7 +218,92 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint x, gint y)
     return FALSE;
   }
 
-  sprintf (buf, "%02d", 50);
+  sprintf (buf, "%02d", speed);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'T');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, '\r');
+  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
+    return FALSE;
+  }
+
+  sprintf (buf, "%02d%02d", v, 0);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'U');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, buf[2]);
+  pana_message_append (&msg, buf[3]);
+  pana_message_append (&msg, '\r');
+
+  return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+}
+
+static gboolean
+gst_cam_controller_pana_tilt (GstCamControllerPana * pana, gint speed, gint v)
+{
+  pana_message msg;             //, reply;
+  char buf[10];
+
+  g_print ("pana: tilt(%d, %d)\n", speed, v);
+
+  sprintf (buf, "%02d", speed);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'P');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, '\r');
+  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
+    return FALSE;
+  }
+
+  sprintf (buf, "%02d", speed);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'T');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, '\r');
+  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
+    return FALSE;
+  }
+
+  sprintf (buf, "%02d%02d", 0, v);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'U');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, buf[2]);
+  pana_message_append (&msg, buf[3]);
+  pana_message_append (&msg, '\r');
+
+  return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+}
+
+static gboolean
+gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
+    gint y)
+{
+  pana_message msg;             //, reply;
+  char buf[10];
+
+  g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
+
+  sprintf (buf, "%02d", speed);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'P');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, '\r');
+  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
+    return FALSE;
+  }
+
+  sprintf (buf, "%02d", speed);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'T');
@@ -243,14 +328,14 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint x, gint y)
 }
 
 static gboolean
-gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint z)
+gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
 {
   pana_message msg, reply;
   char buf[10];
 
   g_print ("pana: zoom(%d)\n", z);
 
-  sprintf (buf, "%02d", 50);
+  sprintf (buf, "%02d", speed);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'Z');
@@ -294,6 +379,8 @@ gst_cam_controller_pana_class_init (GstCamControllerPanaClass * panaclass)
   camctl_class->open = (GstCamControllerOpenFunc) gst_cam_controller_pana_open;
   camctl_class->close =
       (GstCamControllerCloseFunc) gst_cam_controller_pana_close;
+  camctl_class->pan = (GstCamControllerPanFunc) gst_cam_controller_pana_pan;
+  camctl_class->tilt = (GstCamControllerTiltFunc) gst_cam_controller_pana_tilt;
   camctl_class->move = (GstCamControllerMoveFunc) gst_cam_controller_pana_move;
   camctl_class->zoom = (GstCamControllerZoomFunc) gst_cam_controller_pana_zoom;
 }

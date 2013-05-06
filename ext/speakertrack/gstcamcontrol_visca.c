@@ -256,7 +256,61 @@ gst_cam_controller_visca_open (GstCamControllerVisca * visca, const char *dev)
 }
 
 static gboolean
-gst_cam_controller_visca_move (GstCamControllerVisca * visca, gint x, gint y)
+gst_cam_controller_visca_pan (GstCamControllerVisca * visca, gint speed, gint v)
+{
+  visca_message msg = visca_message_init (0);
+  visca_message reply = visca_message_init (0);
+  guint pan_pos = v & 0xFFFF;
+  guint tilt_pos = 0 & 0xFFFF;
+
+  g_print ("visca: pan(%d, %d)\n", speed, v);
+
+  visca_message_append (&msg, VISCA_COMMAND);
+  visca_message_append (&msg, VISCA_CATEGORY_PAN_TILTER);
+  visca_message_append (&msg, VISCA_PT_ABSOLUTE_POSITION);
+  visca_message_append (&msg, speed);
+  visca_message_append (&msg, speed);
+  visca_message_append (&msg, (pan_pos & 0xF000) >> 12);
+  visca_message_append (&msg, (pan_pos & 0x0F00) >> 8);
+  visca_message_append (&msg, (pan_pos & 0x00F0) >> 4);
+  visca_message_append (&msg, (pan_pos & 0x000F) >> 0);
+  visca_message_append (&msg, (tilt_pos & 0xF000) >> 12);
+  visca_message_append (&msg, (tilt_pos & 0x0F00) >> 8);
+  visca_message_append (&msg, (tilt_pos & 0x00F0) >> 4);
+  visca_message_append (&msg, (tilt_pos & 0x000F) >> 0);
+  return visca_message_send_with_reply (visca->fd, &msg, &reply);
+}
+
+static gboolean
+gst_cam_controller_visca_tilt (GstCamControllerVisca * visca, gint speed,
+    gint v)
+{
+  visca_message msg = visca_message_init (0);
+  visca_message reply = visca_message_init (0);
+  guint pan_pos = 0 & 0xFFFF;
+  guint tilt_pos = v & 0xFFFF;
+
+  g_print ("visca: tilt(%d, %d)\n", speed, v);
+
+  visca_message_append (&msg, VISCA_COMMAND);
+  visca_message_append (&msg, VISCA_CATEGORY_PAN_TILTER);
+  visca_message_append (&msg, VISCA_PT_ABSOLUTE_POSITION);
+  visca_message_append (&msg, speed);
+  visca_message_append (&msg, speed);
+  visca_message_append (&msg, (pan_pos & 0xF000) >> 12);
+  visca_message_append (&msg, (pan_pos & 0x0F00) >> 8);
+  visca_message_append (&msg, (pan_pos & 0x00F0) >> 4);
+  visca_message_append (&msg, (pan_pos & 0x000F) >> 0);
+  visca_message_append (&msg, (tilt_pos & 0xF000) >> 12);
+  visca_message_append (&msg, (tilt_pos & 0x0F00) >> 8);
+  visca_message_append (&msg, (tilt_pos & 0x00F0) >> 4);
+  visca_message_append (&msg, (tilt_pos & 0x000F) >> 0);
+  return visca_message_send_with_reply (visca->fd, &msg, &reply);
+}
+
+static gboolean
+gst_cam_controller_visca_move (GstCamControllerVisca * visca, gint speed,
+    gint x, gint y)
 {
   visca_message msg = visca_message_init (0);
   visca_message reply = visca_message_init (0);
@@ -268,8 +322,8 @@ gst_cam_controller_visca_move (GstCamControllerVisca * visca, gint x, gint y)
   visca_message_append (&msg, VISCA_COMMAND);
   visca_message_append (&msg, VISCA_CATEGORY_PAN_TILTER);
   visca_message_append (&msg, VISCA_PT_ABSOLUTE_POSITION);
-  visca_message_append (&msg, visca->pan_speed);
-  visca_message_append (&msg, visca->tilt_speed);
+  visca_message_append (&msg, speed);
+  visca_message_append (&msg, speed);
   visca_message_append (&msg, (pan_pos & 0xF000) >> 12);
   visca_message_append (&msg, (pan_pos & 0x0F00) >> 8);
   visca_message_append (&msg, (pan_pos & 0x00F0) >> 4);
@@ -289,7 +343,8 @@ gst_cam_controller_visca_move (GstCamControllerVisca * visca, gint x, gint y)
  *  @return TRUE if commands sent.
  */
 static gboolean
-gst_cam_controller_visca_zoom (GstCamControllerVisca * visca, gint z)
+gst_cam_controller_visca_zoom (GstCamControllerVisca * visca, gint speed,
+    gint z)
 {
   visca_message msg = visca_message_init (0);
   visca_message reply = visca_message_init (0);
@@ -303,7 +358,7 @@ gst_cam_controller_visca_zoom (GstCamControllerVisca * visca, gint z)
     visca_message_append (&msg, VISCA_ZOOM_STOP);
   } else if (z < 0) {
     visca_message_append (&msg,
-        VISCA_ZOOM_TELE_SPEED | (visca->zoom_speed & 0x07));
+        VISCA_ZOOM_TELE_SPEED | (speed /*visca->zoom_speed */  & 0x07));
     if (!visca_message_send_with_reply (visca->fd, &msg, &reply)) {
       return FALSE;
     }
@@ -316,7 +371,7 @@ gst_cam_controller_visca_zoom (GstCamControllerVisca * visca, gint z)
     visca_message_append (&msg, VISCA_ZOOM_TELE);
   } else if (0 < z) {
     visca_message_append (&msg,
-        VISCA_ZOOM_WIDE_SPEED | (visca->zoom_speed & 0x07));
+        VISCA_ZOOM_WIDE_SPEED | (speed /*visca->zoom_speed */  & 0x07));
     if (!visca_message_send_with_reply (visca->fd, &msg, &reply)) {
       return FALSE;
     }
@@ -342,6 +397,8 @@ gst_cam_controller_visca_class_init (GstCamControllerViscaClass * viscaclass)
   camctl_class->open = (GstCamControllerOpenFunc) gst_cam_controller_visca_open;
   camctl_class->close =
       (GstCamControllerCloseFunc) gst_cam_controller_visca_close;
+  camctl_class->pan = (GstCamControllerPanFunc) gst_cam_controller_visca_pan;
+  camctl_class->tilt = (GstCamControllerTiltFunc) gst_cam_controller_visca_tilt;
   camctl_class->move = (GstCamControllerMoveFunc) gst_cam_controller_visca_move;
   camctl_class->zoom = (GstCamControllerZoomFunc) gst_cam_controller_visca_zoom;
 }

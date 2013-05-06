@@ -1,6 +1,26 @@
+lib_LTLIBRARIES = libgstcamcontrol-@GST_API_VERSION@.la
+
+libgstcamcontrol_@GST_API_VERSION@includedir = \
+  $(includedir)/gstreamer-@GST_API_VERSION@/gst/speakertrack
+libgstcamcontrol_@GST_API_VERSION@include_HEADERS = gstcamcontrol.h
+
+libgstcamcontrol_@GST_API_VERSION@_la_SOURCES = \
+	gstcamcontrol.c \
+	gstcamcontrol_pana.c \
+	gstcamcontrol_visca.c
+
+libgstcamcontrol_@GST_API_VERSION@_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) \
+    $(GST_PLUGINS_BAD_CFLAGS) \
+    $(GST_PLUGINS_BASE_CFLAGS) \
+    $(GST_CFLAGS)
+libgstcamcontrol_@GST_API_VERSION@_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) \
+	$(GSTPB_BASE_LIBS)
+libgstcamcontrol_@GST_API_VERSION@_la_LDFLAGS = \
+	$(GST_LIB_LDFLAGS) $(GST_ALL_LDFLAGS) $(GST_LT_LDFLAGS)
+
 plugin_LTLIBRARIES = libgstspeakertrack.la
 
-noinst_PROGRAMS = ptz
+noinst_PROGRAMS = ptz ptzcontrol
 
 libgstspeakertrack_la_SOURCES = \
 	gstfacedetect2.c \
@@ -26,8 +46,19 @@ noinst_HEADERS = \
 	gstspeakertrack.h \
 	gstcamcontrol.h
 
-ptz_SOURCES = ptz.c
+ptz_SOURCES = test_ptz.c
 ptz_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
 ptz_CXXFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
 ptz_LDFLAGS = $(GST_LIBS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS)
 ptz_LDADD = $(GST_LIBS) $(GST_BASE_LIBS)
+
+ptzcontrol_SOURCES = \
+	gstptzcontrol_gtk.c \
+	gstcamcontrol.c \
+	gstcamcontrol_pana.c \
+	gstcamcontrol_visca.c
+
+ptzcontrol_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
+ptzcontrol_CXXFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
+ptzcontrol_LDFLAGS = $(GST_LIBS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS)
+ptzcontrol_LDADD = $(GST_LIBS) $(GST_BASE_LIBS)

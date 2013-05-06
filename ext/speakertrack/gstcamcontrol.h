@@ -55,7 +55,8 @@ G_BEGIN_DECLS
 #define GST_CAM_CONTROLLER_CLASS(class) (G_TYPE_CHECK_CLASS_CAST ((class), GST_TYPE_CAM_CONTROLLER, GstCamControllerClass))
 #define GST_IS_CAM_CONTROLLER(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), GST_TYPE_CAM_CONTROLLER))
 #define GST_IS_CAM_CONTROLLER_CLASS(class) (G_TYPE_CHECK_CLASS_TYPE ((class), GST_TYPE_CAM_CONTROLLER))
-    typedef struct _GstCamController
+
+typedef struct _GstCamController
 {
   GObject base;
 } GstCamController;
@@ -65,20 +66,35 @@ typedef struct _GstCamControllerClass
   GObjectClass base_class;
 
     gboolean (*open) (GstCamController *, const char *dev);
-  void (*close) (GstCamController *);
+    void (*close) (GstCamController *);
 
-    gboolean (*move) (GstCamController *, gint x, gint y);
-    gboolean (*zoom) (GstCamController *, gint z);
+    gboolean (*pan) (GstCamController *, gint speed, gint v);
+    gboolean (*tilt) (GstCamController *, gint speed, gint v);
+    gboolean (*move) (GstCamController *, gint speed, gint x, gint y);
+    gboolean (*zoom) (GstCamController *, gint speed, gint v);
 } GstCamControllerClass;
 
 typedef gboolean (*GstCamControllerOpenFunc) (GstCamController *,
     const char *dev);
 typedef void (*GstCamControllerCloseFunc) (GstCamController *);
-typedef gboolean (*GstCamControllerMoveFunc) (GstCamController *, gint x,
+typedef gboolean (*GstCamControllerPanFunc) (GstCamController *, gint x,
     gint y);
-typedef gboolean (*GstCamControllerZoomFunc) (GstCamController *, gint z);
+typedef gboolean (*GstCamControllerTiltFunc) (GstCamController *, gint x,
+    gint y);
+typedef gboolean (*GstCamControllerMoveFunc) (GstCamController *, gint x,
+    gint y, gint z);
+typedef gboolean (*GstCamControllerZoomFunc) (GstCamController *, gint x,
+    gint y);
 
 GType gst_cam_controller_get_type (void);
+
+GstCamController *gst_cam_controller_new (const char *protocol);
+gboolean gst_cam_controller_open (GstCamController * controller, const char *dev);
+void gst_cam_controller_close (GstCamController * controller);
+gboolean gst_cam_controller_pan (GstCamController * controller, gint speed, gint v);
+gboolean gst_cam_controller_tilt (GstCamController * controller, gint speed, gint v);
+gboolean gst_cam_controller_move (GstCamController * controller, gint speed, gint x, gint y);
+gboolean gst_cam_controller_zoom (GstCamController * controller, gint speed, gint v);
 
 #define GST_TYPE_CAM_CONTROL \
   (gst_cam_control_get_type())
