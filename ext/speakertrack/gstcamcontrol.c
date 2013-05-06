@@ -133,7 +133,21 @@ gst_cam_controller_finalize (GstCamController * controller)
       ->finalize (G_OBJECT (controller));
 }
 
-static gboolean
+GstCamController *
+gst_cam_controller_new (const char *protocol)
+{
+  GstCamController *controller = NULL;
+  if (strcmp (protocol, "visca") == 0) {
+    controller =
+        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_VISCA, NULL));
+  } else if (strcmp (protocol, "pana") == 0) {
+    controller =
+        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_PANA, NULL));
+  }
+  return controller;
+}
+
+/*static*/ gboolean
 gst_cam_controller_open (GstCamController * controller, const char *dev)
 {
   GstCamControllerClass *ccc =
@@ -143,7 +157,7 @@ gst_cam_controller_open (GstCamController * controller, const char *dev)
   return FALSE;
 }
 
-static void
+/*static*/ void
 gst_cam_controller_close (GstCamController * controller)
 {
   GstCamControllerClass *ccc =
@@ -152,23 +166,43 @@ gst_cam_controller_close (GstCamController * controller)
     return ccc->close (controller);
 }
 
-static gboolean
-gst_cam_controller_move (GstCamController * controller, gint x, gint y)
+/*static*/ gboolean
+gst_cam_controller_pan (GstCamController * controller, gint x, gint y)
+{
+  GstCamControllerClass *ccc =
+      GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
+  if (ccc->pan)
+    return ccc->pan (controller, x, y);
+  return FALSE;
+}
+
+/*static*/ gboolean
+gst_cam_controller_tilt (GstCamController * controller, gint x, gint y)
+{
+  GstCamControllerClass *ccc =
+      GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
+  if (ccc->tilt)
+    return ccc->tilt (controller, x, y);
+  return FALSE;
+}
+
+/*static*/ gboolean
+gst_cam_controller_move (GstCamController * controller, gint s, gint x, gint y)
 {
   GstCamControllerClass *ccc =
       GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
   if (ccc->move)
-    return ccc->move (controller, x, y);
+    return ccc->move (controller, s, x, y);
   return FALSE;
 }
 
-static gboolean
-gst_cam_controller_zoom (GstCamController * controller, gint z)
+/*static*/ gboolean
+gst_cam_controller_zoom (GstCamController * controller, gint x, gint y)
 {
   GstCamControllerClass *ccc =
       GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
   if (ccc->zoom)
-    return ccc->zoom (controller, z);
+    return ccc->zoom (controller, x, y);
   return FALSE;
 }
 
@@ -307,8 +341,8 @@ gst_cam_control_face_track (GstCamcontrol * camctl, const GstStructure * s)
   z = 0;
 
   if (camctl->controller) {
-    gst_cam_controller_move (camctl->controller, x, y);
-    gst_cam_controller_zoom (camctl->controller, z);
+    gst_cam_controller_move (camctl->controller, 100, x, y);
+    gst_cam_controller_zoom (camctl->controller, 100, z);
   } else {
     g_print ("camctl: (%d, %d)\n", x, y);
   }
@@ -410,7 +444,7 @@ gst_cam_control_class_init (GstCamcontrolClass * klass)
   gst_element_class_set_static_metadata (element_class,
       "camcontrol",
       "Filter/Effect/Video",
-      "Control PTZ camera according speakertrack.",
+      "Control PTZ camera according to speakertrack.",
       "Duzy Chan <code@duzy.info>");
 
   gst_element_class_add_pad_template (element_class,
@@ -419,5 +453,5 @@ gst_cam_control_class_init (GstCamcontrolClass * klass)
       gst_static_pad_template_get (&sink_factory));
 
   GST_DEBUG_CATEGORY_INIT (gst_cam_control_debug, "camcontrol",
-      0, "Control camera according speakertrack.");
+      0, "Control camera according to speakertrack.");
 }

@@ -24,7 +24,7 @@ run (GstCamController * ctrl, const char *name)
   for (int n = 0, x = 0, y = 0; n < 100; ++n) {
     x += 10;
     y += 10;
-    if (gst_cam_controller_move (ctrl, x, y)) {
+    if (gst_cam_controller_move (ctrl, 100, x, y)) {
       fprintf (stderr, "can't move: (%d, %d)", x, y);
     }
     usleep (100000);
