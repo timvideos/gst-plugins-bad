@@ -1,13 +1,25 @@
 lib_LTLIBRARIES = libgstcamcontrol-@GST_API_VERSION@.la
 
+camcontrol_sources = \
+	gstcamcontrol.c \
+	gstcamcontrol_pana.c \
+	gstcamcontrol_visca.c \
+	gstcamcontrol_visca_sony.c
+
+sony_visca_sources = \
+	visca_sony/commands.cpp \
+	visca_sony/comm.cpp \
+	visca_sony/init.cpp \
+	visca_sony/viscacamera.cpp \
+	visca_sony/viscaconnection.cpp
+
 libgstcamcontrol_@GST_API_VERSION@includedir = \
   $(includedir)/gstreamer-@GST_API_VERSION@/gst/speakertrack
 libgstcamcontrol_@GST_API_VERSION@include_HEADERS = gstcamcontrol.h
 
 libgstcamcontrol_@GST_API_VERSION@_la_SOURCES = \
-	gstcamcontrol.c \
-	gstcamcontrol_pana.c \
-	gstcamcontrol_visca.c
+	$(camcontrol_sources) $(sony_visca_sources)
+
 
 libgstcamcontrol_@GST_API_VERSION@_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) \
     $(GST_PLUGINS_BAD_CFLAGS) \
@@ -24,12 +36,9 @@ noinst_PROGRAMS = ptz ptzcontrol
 
 libgstspeakertrack_la_SOURCES = \
 	gstfacedetect2.c \
-	gstspeakertrack.c \
-	gstcamcontrol.c \
-	gstcamcontrol_pana.c \
-	gstcamcontrol_visca.c
+	gstspeakertrack.c
 
-libgstspeakertrack_la_CXXFLAGS = $(GST_CXXFLAGS) $(OPENCV_CFLAGS)
+#libgstspeakertrack_la_CXXFLAGS = $(GST_CXXFLAGS) $(OPENCV_CFLAGS)
 libgstspeakertrack_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(OPENCV_CFLAGS) \
 	$(GST_PLUGINS_BASE_CFLAGS) -DCV_INLINE="static inline" \
 	-DCV_NO_BACKWARD_COMPATIBILITY \
@@ -48,17 +57,17 @@ noinst_HEADERS = \
 
 ptz_SOURCES = test_ptz.c
 ptz_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
-ptz_CXXFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
+#ptz_CXXFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
 ptz_LDFLAGS = $(GST_LIBS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS)
-ptz_LDADD = $(GST_LIBS) $(GST_BASE_LIBS)
+ptz_LDADD = $(GST_LIBS) $(GST_BASE_LIBS) \
+	-L$(top_srcdir)/ext/speakertrack -lgstcamcontrol-@GST_API_VERSION@
 
 ptzcontrol_SOURCES = \
-	gstptzcontrol_gtk.c \
-	gstcamcontrol.c \
-	gstcamcontrol_pana.c \
-	gstcamcontrol_visca.c
+	gstptzcontrol_gtk.c
 
 ptzcontrol_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
-ptzcontrol_CXXFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
+#ptzcontrol_CXXFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
 ptzcontrol_LDFLAGS = $(GST_LIBS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS)
-ptzcontrol_LDADD = $(GST_LIBS) $(GST_BASE_LIBS)
+ptzcontrol_LDADD = $(GST_LIBS) $(GST_BASE_LIBS) \
+	-L$(top_srcdir)/ext/speakertrack -lgstcamcontrol-@GST_API_VERSION@
+

@@ -1,0 +1,3 @@
+
+* The visca broadcast commands seem to only work for initialization. Broadcast commands affect all connected cameras, and are represented in this project as a special camera. Moving the broadcast camera has no effect on any camera.
+

@@ -75,6 +75,7 @@
 
 #include "gstcamcontrol.h"
 #include "gstcamcontrol_visca.h"
+#include "gstcamcontrol_visca_sony.h"
 #include "gstcamcontrol_pana.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_cam_control_debug);
@@ -140,6 +141,10 @@ gst_cam_controller_new (const char *protocol)
   if (strcmp (protocol, "visca") == 0) {
     controller =
         GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_VISCA, NULL));
+  } else if (strcmp (protocol, "visca-sony") == 0) {
+    controller =
+        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_VISCA_SONY,
+            NULL));
   } else if (strcmp (protocol, "pana") == 0) {
     controller =
         GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_PANA, NULL));
@@ -255,14 +260,7 @@ gst_cam_control_prepare_controller (GstCamcontrol * camctl)
     return FALSE;
   }
 
-  if (strcmp (camctl->protocol, "visca") == 0) {
-    camctl->controller =
-        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_VISCA, NULL));
-  } else if (strcmp (camctl->protocol, "pana") == 0) {
-    camctl->controller =
-        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_PANA, NULL));
-  }
-
+  camctl->controller = gst_cam_controller_new (camctl->protocol);
   return gst_cam_controller_open (camctl->controller, camctl->device);
 }
 
