@@ -11,6 +11,7 @@
 #include <math.h>
 #include "gstcamcontrol_pana.c"
 #include "gstcamcontrol_visca.c"
+#include "gstcamcontrol_visca_sony.c"
 #include "gstcamcontrol.c"
 
 static void
