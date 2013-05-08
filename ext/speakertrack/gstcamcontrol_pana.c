@@ -89,7 +89,7 @@ pana_message_send (int fd, const pana_message * msg)
   }
 
   g_print ("send: ");
-  for (n = 0; n < msg->len)
+  for (n = 0; n < msg->len; ++n)
     g_print ("%c ", msg->buffer[n]);
   g_print ("\n");
 
@@ -122,8 +122,8 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
   } while (n < sizeof (reply->buffer) - 1);
 
   g_print ("read: ");
-  for (n = 0; n < msg->len)
-    g_print ("%c ", msg->buffer[n]);
+  for (n = 0; n < reply->len; ++n)
+    g_print ("%c ", reply->buffer[n]);
   g_print ("\n");
 
   reply->len = n;
