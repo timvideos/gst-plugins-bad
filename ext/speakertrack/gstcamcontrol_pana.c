@@ -121,12 +121,13 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
     usleep (1);
   } while (n < sizeof (reply->buffer) - 1);
 
+  reply->len = n;
+
   g_print ("read: ");
   for (n = 0; n < reply->len; ++n)
     g_print ("%c ", reply->buffer[n]);
   g_print ("\n");
 
-  reply->len = n;
   return TRUE;
 }
 
