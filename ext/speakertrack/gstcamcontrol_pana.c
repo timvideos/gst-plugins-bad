@@ -239,7 +239,7 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
   pana_message_append (&msg, '?');
   pana_message_append (&msg, '\x03');
   if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
-    g_print ("send init commands failed, close %d", pana->fd);
+    g_print ("send init commands failed, close %d\n", pana->fd);
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
@@ -271,7 +271,7 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
 
   pana_message_reset (&reply);
   if (!pana_message_reply (pana->fd, &reply, '\x03')) {
-    g_print ("read init reply failed, close %d", pana->fd);
+    g_print ("read init reply failed, close %d\n", pana->fd);
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
@@ -279,7 +279,7 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
 
   pana_message_reset (&reply);
   if (!pana_message_reply (pana->fd, &reply, '\x03')) {
-    g_print ("read init reply failed, close %d", pana->fd);
+    g_print ("read init reply failed, close %d\n", pana->fd);
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
