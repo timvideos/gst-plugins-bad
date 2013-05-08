@@ -320,7 +320,7 @@ gst_cam_controller_pana_pan (GstCamControllerPana * pana, gint speed, gint v)
   //return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
 
   pana_message_reset (&msg);
-  pana_message_reply (fd, &msg, '\x03');
+  pana_message_reply (pana->fd, &msg, '\x03');
   g_print ("pana: pan: %s\n", msg.buffer);
   return TRUE;
 }
@@ -358,7 +358,7 @@ gst_cam_controller_pana_tilt (GstCamControllerPana * pana, gint speed, gint v)
   //return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
 
   pana_message_reset (&msg);
-  pana_message_reply (fd, &msg, '\x03');
+  pana_message_reply (pana->fd, &msg, '\x03');
   g_print ("pana: tilt: %s\n", msg.buffer);
   return TRUE;
 }
@@ -384,7 +384,7 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
   }
 
   pana_message_reset (&msg);
-  pana_message_reply (fd, &msg, '\x03');
+  pana_message_reply (pana->fd, &msg, '\x03');
   g_print ("pana: pan: %s\n", msg.buffer);
 
   sprintf (buf, "%02d", y);
@@ -399,7 +399,7 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
   }
 
   pana_message_reset (&msg);
-  pana_message_reply (fd, &msg, '\x03');
+  pana_message_reply (pana->fd, &msg, '\x03');
   g_print ("pana: tilt: %s\n", msg.buffer);
 
   /*
