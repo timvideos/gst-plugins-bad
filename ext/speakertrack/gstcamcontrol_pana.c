@@ -82,11 +82,16 @@ pana_message_reset (pana_message * msg)
 static gboolean
 pana_message_send (int fd, const pana_message * msg)
 {
-  int len = 1 + msg->len;
+  int len = 1 + msg->len, n;
   char b[32];
   if (msg->len <= 0 || sizeof (b) <= len) {
     return FALSE;
   }
+
+  g_print ("send: ");
+  for (n = 0; n < msg->len)
+    g_print ("%c ", msg->buffer[n]);
+  g_print ("\n");
 
   memcpy (&b[0], msg->buffer, msg->len);
   if (write (fd, msg->buffer, msg->len) < msg->len) {
@@ -115,6 +120,11 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
     n += 1;
     usleep (1);
   } while (n < sizeof (reply->buffer) - 1);
+
+  g_print ("read: ");
+  for (n = 0; n < msg->len)
+    g_print ("%c ", msg->buffer[n]);
+  g_print ("\n");
 
   reply->len = n;
   return TRUE;
