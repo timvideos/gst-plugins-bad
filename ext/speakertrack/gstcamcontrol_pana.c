@@ -110,7 +110,7 @@ static gboolean
 pana_message_send (int fd, const pana_message * msg)
 {
   if (msg->len <= 0) {
-    g_print ("send: (empty message)");
+    g_print ("send: (empty message)\n");
     return FALSE;
   }
 
@@ -156,7 +156,7 @@ pana_message_send_with_reply (int fd, const pana_message * msg,
     pana_message * reply)
 {
   if (!pana_message_send (fd, msg)) {
-    g_print ("send failed");
+    g_print ("send failed\n");
     return FALSE;
   }
   return pana_message_reply (fd, reply, '\x03');
