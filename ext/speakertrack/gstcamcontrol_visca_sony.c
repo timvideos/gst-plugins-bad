@@ -94,7 +94,8 @@ static gboolean
 gst_cam_controller_visca_sony_pan (GstCamControllerViscaSony * visca_sony,
     gint speed, gint v)
 {
-  sony_visca_pan (visca_sony->sony, v);
+  double d = ((double) v) / (100);
+  sony_visca_pan (visca_sony->sony, d);
   return TRUE;
 }
 
@@ -102,7 +103,8 @@ static gboolean
 gst_cam_controller_visca_sony_tilt (GstCamControllerViscaSony * visca_sony,
     gint speed, gint v)
 {
-  sony_visca_tilt (visca_sony->sony, v);
+  double d = ((double) v) / (100);
+  sony_visca_tilt (visca_sony->sony, d);
   return TRUE;
 }
 
@@ -110,8 +112,10 @@ static gboolean
 gst_cam_controller_visca_sony_move (GstCamControllerViscaSony * visca_sony,
     gint speed, gint x, gint y)
 {
-  sony_visca_pan (visca_sony->sony, x);
-  sony_visca_tilt (visca_sony->sony, y);
+  double dx = ((double) x) / (100);
+  double dy = ((double) y) / (100);
+  sony_visca_pan (visca_sony->sony, dx);
+  sony_visca_tilt (visca_sony->sony, dy);
   return TRUE;
 }
 
