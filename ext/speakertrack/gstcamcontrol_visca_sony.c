@@ -104,7 +104,7 @@ static gboolean
 gst_cam_controller_visca_sony_tilt (GstCamControllerViscaSony * visca_sony,
     gint speed, gint v)
 {
-  double d = ((double) v) / 100.0;
+  double d = 1.0 - ((double) v) / 100.0;
   g_print ("tilt: %f\n", d);
   sony_visca_tilt (visca_sony->sony, d);
   return TRUE;
@@ -115,7 +115,7 @@ gst_cam_controller_visca_sony_move (GstCamControllerViscaSony * visca_sony,
     gint speed, gint x, gint y)
 {
   double dx = ((double) x) / 100.0;
-  double dy = ((double) y) / 100.0;
+  double dy = 1.0 - ((double) y) / 100.0;
   g_print ("move: %f, %f\n", dx, dy);
   sony_visca_pan (visca_sony->sony, dx);
   sony_visca_tilt (visca_sony->sony, dy);
