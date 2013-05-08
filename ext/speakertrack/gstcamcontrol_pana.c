@@ -93,7 +93,7 @@ pana_message_dump (const pana_message * msg, const gchar * tag)
 static void
 pana_message_append (pana_message * msg, char c)
 {
-  if (0 < msg->len && msg->len < sizeof (msg->buffer) - 1) {
+  if (0 <= msg->len && msg->len < sizeof (msg->buffer) - 1) {
     msg->buffer[msg->len++] = c;
     msg->buffer[msg->len] = 0;
   }
