@@ -235,6 +235,7 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
   pana_message_append (&msg, 'Q');
   pana_message_append (&msg, 'S');
   pana_message_append (&msg, 'A');
+  pana_message_append (&msg, ':');
   pana_message_append (&msg, '8');
   pana_message_append (&msg, '7');
   pana_message_append (&msg, '\x03');
