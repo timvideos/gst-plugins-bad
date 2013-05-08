@@ -70,7 +70,9 @@ typedef struct _pana_message
 static void
 pana_message_append (pana_message * msg, char c)
 {
-  msg->buffer[msg->len++] = c;
+  if (0 < msg->len && msg->len < sizeof (msg->buffer)) {
+    msg->buffer[msg->len++] = c;
+  }
 }
 
 static void
@@ -185,7 +187,8 @@ gst_cam_controller_pana_close (GstCamControllerPana * pana)
 static gboolean
 gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
 {
-  pana_message msg, reply;
+  pana_message msg = { {0}, 0 };
+  pana_message reply = { {0}, 0 };
   g_print ("pana: open(%s)\n", dev);
 
   if (0 < pana->fd) {
@@ -223,6 +226,7 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
   tcsetattr (pana->fd, TCSANOW, &pana->options);
 
   // initialization commands
+  pana_message_reset (&msg);
   pana_message_append (&msg, '\x02');
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'V');
@@ -275,12 +279,13 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
 static gboolean
 gst_cam_controller_pana_pan (GstCamControllerPana * pana, gint speed, gint v)
 {
-  pana_message msg;             //, reply;
+  pana_message msg = { {0}, 0 };        //, reply;
   char buf[10];
 
   g_print ("pana: pan(%d, %d)\n", speed, v);
 
   sprintf (buf, "%02d", v);
+  pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'P');
   pana_message_append (&msg, buf[0]);
@@ -308,7 +313,7 @@ gst_cam_controller_pana_pan (GstCamControllerPana * pana, gint speed, gint v)
 static gboolean
 gst_cam_controller_pana_tilt (GstCamControllerPana * pana, gint speed, gint v)
 {
-  pana_message msg;             //, reply;
+  pana_message msg = { {0}, 0 };        //, reply;
   char buf[10];
 
   g_print ("pana: tilt(%d, %d)\n", speed, v);
@@ -343,12 +348,13 @@ static gboolean
 gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
     gint y)
 {
-  pana_message msg;             //, reply;
+  pana_message msg = { {0}, 0 };        //, reply;
   char buf[10];
 
   g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
 
   sprintf (buf, "%02d", x);
+  pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'P');
   pana_message_append (&msg, buf[0]);
@@ -387,7 +393,8 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
 static gboolean
 gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
 {
-  pana_message msg, reply;
+  pana_message msg = { {0}, 0 };
+  pana_message reply = { {0}, 0 };
   char buf[10];
 
   g_print ("pana: zoom(%d)\n", z);
