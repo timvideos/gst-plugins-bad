@@ -122,9 +122,9 @@ extern "C" {
     void sony_visca_free(SonyVisca *sony);
     void sony_visca_open(SonyVisca *sony, const char *device);
     void sony_visca_close(SonyVisca *sony);
-    void sony_visca_pan(SonyVisca *sony, int x);
-    void sony_visca_tilt(SonyVisca *sony, int y);
-    void sony_visca_zoom(SonyVisca *sony, int z);
+    void sony_visca_pan(SonyVisca *sony, double x);
+    void sony_visca_tilt(SonyVisca *sony, double y);
+    void sony_visca_zoom(SonyVisca *sony, double z);
 #ifdef __cplusplus
 }
 #endif

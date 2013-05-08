@@ -209,21 +209,21 @@ void sony_visca_close(SonyVisca *sony)
     sony->camera = ViscaCamera();
 }
 
-void sony_visca_pan(SonyVisca *sony, int x)
+void sony_visca_pan(SonyVisca *sony, double x)
 {
     if (sony->visca) {
 	sony->camera.MovePan(x);
     }
 }
 
-void sony_visca_tilt(SonyVisca *sony, int y)
+void sony_visca_tilt(SonyVisca *sony, double y)
 {
     if (sony->visca) {
 	sony->camera.MoveTilt(y);
     }
 }
 
-void sony_visca_zoom(SonyVisca *sony, int z)
+void sony_visca_zoom(SonyVisca *sony, double z)
 {
     if (sony->visca) {
 	sony->camera.MoveZoom(z);
