@@ -68,10 +68,34 @@ typedef struct _pana_message
 } pana_message;
 
 static void
+pana_message_dump (const pana_message * msg, const gchar * tag)
+{
+  int n;
+
+  g_print ("%s: ", tag);
+  if (msg->len <= 0) {
+    g_print ("(empty message)\n");
+    return;
+  }
+
+  for (n = 0; n < msg->len; ++n) {
+    int c = msg->buffer[n];
+    if (c == '\r')
+      g_print ("\\r");
+    else if (isprint (c))
+      g_print ("%c", c);
+    else
+      g_print ("\\x%02x", c);
+  }
+  g_print ("\n");
+}
+
+static void
 pana_message_append (pana_message * msg, char c)
 {
-  if (0 < msg->len && msg->len < sizeof (msg->buffer)) {
+  if (0 < msg->len && msg->len < sizeof (msg->buffer) - 1) {
     msg->buffer[msg->len++] = c;
+    msg->buffer[msg->len] = 0;
   }
 }
 
@@ -85,26 +109,17 @@ pana_message_reset (pana_message * msg)
 static gboolean
 pana_message_send (int fd, const pana_message * msg)
 {
-  int n;
   if (msg->len <= 0) {
+    g_print ("send: (empty message)");
     return FALSE;
   }
-
-  g_print ("send: ");
-  for (n = 0; n < msg->len; ++n) {
-    int c = msg->buffer[n];
-    if (c == '\r')
-      g_print ("\\r");
-    else if (isprint (c))
-      g_print ("%c", c);
-    else
-      g_print ("\\x%02x", c);
-  }
-  g_print ("\n");
 
   if (write (fd, msg->buffer, msg->len) < msg->len) {
+    perror ("write");
     return FALSE;
   }
+
+  pana_message_dump (msg, "send");
   return TRUE;
 }
 
@@ -120,6 +135,7 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
 
   do {
     if (read (fd, &reply->buffer[n], 1) != 1) {
+      perror ("read");
       return FALSE;
     }
     if (reply->buffer[n] == terminator /*PANA_TERMINATOR */ ) {
@@ -131,18 +147,7 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
 
   reply->len = n;
 
-  g_print ("read: ");
-  for (n = 0; n < reply->len; ++n) {
-    int c = reply->buffer[n];
-    if (c == '\r')
-      g_print ("\\r");
-    else if (isprint (c))
-      g_print ("%c", c);
-    else
-      g_print ("\\x%02x", c);
-  }
-  g_print ("\n");
-
+  pana_message_dump (reply, "read");
   return TRUE;
 }
 
@@ -151,6 +156,7 @@ pana_message_send_with_reply (int fd, const pana_message * msg,
     pana_message * reply)
 {
   if (!pana_message_send (fd, msg)) {
+    g_print ("send failed");
     return FALSE;
   }
   return pana_message_reply (fd, reply, '\x03');
@@ -233,6 +239,7 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
   pana_message_append (&msg, '?');
   pana_message_append (&msg, '\x03');
   if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
+    g_print ("send init commands failed, close %d", pana->fd);
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
@@ -257,11 +264,14 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
   pana_message_append (&msg, '7');
   pana_message_append (&msg, '\x03');
   if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
+    g_print ("send init commands failed, close %d", pana->fd);
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
 
+  pana_message_reset (&reply);
   if (!pana_message_reply (pana->fd, &reply, '\x03')) {
+    g_print ("read init reply failed, close %d", pana->fd);
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
@@ -269,6 +279,7 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
 
   pana_message_reset (&reply);
   if (!pana_message_reply (pana->fd, &reply, '\x03')) {
+    g_print ("read init reply failed, close %d", pana->fd);
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
