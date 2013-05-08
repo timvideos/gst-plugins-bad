@@ -54,6 +54,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <stdio.h>
+#include <ctype.h>
 
 G_DEFINE_TYPE (GstCamControllerPana, gst_cam_controller_pana,
     GST_TYPE_CAM_CONTROLLER);
@@ -89,8 +90,15 @@ pana_message_send (int fd, const pana_message * msg)
   }
 
   g_print ("send: ");
-  for (n = 0; n < msg->len; ++n)
-    g_print ("%c ", msg->buffer[n]);
+  for (n = 0; n < msg->len; ++n) {
+    int c = msg->buffer[n];
+    if (c == '\r')
+      g_print ("\\r");
+    else if (isprint (c))
+      g_print ("%c", c);
+    else
+      g_print ("\\x%02x", c);
+  }
   g_print ("\n");
 
   memcpy (&b[0], msg->buffer, msg->len);
@@ -124,8 +132,15 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
   reply->len = n;
 
   g_print ("read: ");
-  for (n = 0; n < reply->len; ++n)
-    g_print ("%c ", reply->buffer[n]);
+  for (n = 0; n < reply->len; ++n) {
+    int c = reply->buffer[n];
+    if (c == '\r')
+      g_print ("\\r");
+    else if (isprint (c))
+      g_print ("%c", c);
+    else
+      g_print ("\\x%02x", c);
+  }
   g_print ("\n");
 
   return TRUE;
