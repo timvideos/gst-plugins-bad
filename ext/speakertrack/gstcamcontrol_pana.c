@@ -117,7 +117,6 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
   } while (n < sizeof (reply->buffer) - 1);
 
   reply->len = n;
-
   return TRUE;
 }
 
@@ -237,7 +236,6 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
-  reply.buffer[reply.len] = 0;
   g_print ("open: %s\n", reply.buffer);
 
   pana_message_reset (&reply);
@@ -245,7 +243,6 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
     gst_cam_controller_pana_close (pana);
     return FALSE;
   }
-  reply.buffer[reply.len] = 0;
   g_print ("open: %s\n", reply.buffer);
   return TRUE;
 }
