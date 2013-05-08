@@ -96,7 +96,7 @@ pana_message_send (int fd, const pana_message * msg)
 }
 
 static gboolean
-pana_message_reply (int fd, pana_message * reply)
+pana_message_reply (int fd, pana_message * reply, char terminator)
 {
   int available_bytes = 0, n = 0;
 
@@ -109,11 +109,9 @@ pana_message_reply (int fd, pana_message * reply)
     if (read (fd, &reply->buffer[n], 1) != 1) {
       return FALSE;
     }
-    /*
-       if (reply->buffer[n] == PANA_TERMINATOR) {
-       break;
-       }
-     */
+    if (reply->buffer[n] == terminator /*PANA_TERMINATOR */ ) {
+      break;
+    }
     n += 1;
     usleep (1);
   } while (1);
@@ -128,7 +126,7 @@ pana_message_send_with_reply (int fd, const pana_message * msg,
   if (!pana_message_send (fd, msg)) {
     return FALSE;
   }
-  return pana_message_reply (fd, reply);
+  return pana_message_reply (fd, reply, '\x03');
 }
 
 static void
@@ -162,6 +160,7 @@ gst_cam_controller_pana_close (GstCamControllerPana * pana)
 static gboolean
 gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
 {
+  pana_message msg, reply;
   g_print ("pana: open(%s)\n", dev);
 
   if (0 < pana->fd) {
@@ -197,6 +196,55 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
   pana->options.c_oflag &= ~OPOST;      /* raw output */
 
   tcsetattr (pana->fd, TCSANOW, &pana->options);
+
+  // initialization commands
+  pana_message_append (&msg, '\x02');
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'V');
+  pana_message_append (&msg, '?');
+  pana_message_append (&msg, '\x03');
+  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
+    gst_cam_controller_pana_close (pana);
+    return FALSE;
+  }
+
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '\x02');
+  pana_message_append (&msg, 'O');
+  pana_message_append (&msg, 'S');
+  pana_message_append (&msg, 'A');
+  pana_message_append (&msg, ':');
+  pana_message_append (&msg, '8');
+  pana_message_append (&msg, '7');
+  pana_message_append (&msg, ':');
+  pana_message_append (&msg, '2');
+  pana_message_append (&msg, '\x03');
+  pana_message_append (&msg, '\x02');
+  pana_message_append (&msg, 'Q');
+  pana_message_append (&msg, 'S');
+  pana_message_append (&msg, 'A');
+  pana_message_append (&msg, '8');
+  pana_message_append (&msg, '7');
+  pana_message_append (&msg, '\x03');
+  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
+    gst_cam_controller_pana_close (pana);
+    return FALSE;
+  }
+
+  if (!pana_message_reply (pana->fd, &reply, '\x03')) {
+    gst_cam_controller_pana_close (pana);
+    return FALSE;
+  }
+  reply.buffer[reply.len] = 0;
+  g_print ("open: %s\n", reply.buffer);
+
+  pana_message_reset (&reply);
+  if (!pana_message_reply (pana->fd, &reply, '\x03')) {
+    gst_cam_controller_pana_close (pana);
+    return FALSE;
+  }
+  reply.buffer[reply.len] = 0;
+  g_print ("open: %s\n", reply.buffer);
   return TRUE;
 }
 
