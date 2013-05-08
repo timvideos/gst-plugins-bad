@@ -83,9 +83,8 @@ pana_message_reset (pana_message * msg)
 static gboolean
 pana_message_send (int fd, const pana_message * msg)
 {
-  int len = 1 + msg->len, n;
-  char b[32];
-  if (msg->len <= 0 || sizeof (b) <= len) {
+  int n;
+  if (msg->len <= 0) {
     return FALSE;
   }
 
@@ -101,7 +100,6 @@ pana_message_send (int fd, const pana_message * msg)
   }
   g_print ("\n");
 
-  memcpy (&b[0], msg->buffer, msg->len);
   if (write (fd, msg->buffer, msg->len) < msg->len) {
     return FALSE;
   }
