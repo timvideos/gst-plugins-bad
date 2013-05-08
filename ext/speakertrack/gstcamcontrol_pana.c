@@ -466,6 +466,11 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
      pana_message_append (&msg, '\r');
      }
    */
+  /*
+     pana_message_reset (&reply);
+     return pana_message_send_with_reply (pana->fd, &msg, &reply);
+   */
+
   sprintf (buf, "%02d", z);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
@@ -474,8 +479,7 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
   pana_message_append (&msg, buf[1]);
   pana_message_append (&msg, '\r');
 
-  pana_message_reset (&reply);
-  return pana_message_send_with_reply (pana->fd, &msg, &reply);
+  return pana_message_send (pana->fd, &msg);
 }
 
 static void
