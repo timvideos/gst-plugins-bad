@@ -185,7 +185,11 @@ void ViscaConnectionImp::init(const char *device) {
 
 extern "C" {
 
-SonyVisca* sony_visca_new() { return new SonyVisca; }
+SonyVisca* sony_visca_new() {
+    SonyVisca *sony = new SonyVisca;
+    sony->visca = NULL;
+    return sony;
+}
 void sony_visca_free(SonyVisca *sony) { return delete sony; }
 
 void sony_visca_open(SonyVisca *sony, const char *device)
