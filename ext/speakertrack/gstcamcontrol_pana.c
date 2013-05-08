@@ -151,6 +151,7 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
   return TRUE;
 }
 
+/*
 static gboolean
 pana_message_send_with_reply (int fd, const pana_message * msg,
     pana_message * reply)
@@ -161,6 +162,7 @@ pana_message_send_with_reply (int fd, const pana_message * msg,
   }
   return pana_message_reply (fd, reply, '\x03');
 }
+*/
 
 static void
 gst_cam_controller_pana_init (GstCamControllerPana * pana)
@@ -429,7 +431,7 @@ static gboolean
 gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
 {
   pana_message msg = { {0}, 0 };
-  pana_message reply = { {0}, 0 };
+  //pana_message reply = { {0}, 0 };
   char buf[10];
 
   g_print ("pana: zoom(%d)\n", z);
