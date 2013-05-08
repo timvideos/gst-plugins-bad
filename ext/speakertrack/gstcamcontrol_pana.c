@@ -62,7 +62,7 @@ G_DEFINE_TYPE (GstCamControllerPana, gst_cam_controller_pana,
 
 typedef struct _pana_message
 {
-  char buffer[64];              // 64 bytes for one command max
+  char buffer[1024];            // 64 bytes for one command max
   int len;
 } pana_message;
 
@@ -114,7 +114,7 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
     }
     n += 1;
     usleep (1);
-  } while (1);
+  } while (n < sizeof (reply->buffer) - 1);
 
   return TRUE;
 }

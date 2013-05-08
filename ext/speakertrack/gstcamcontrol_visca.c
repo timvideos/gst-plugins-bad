@@ -150,7 +150,7 @@ visca_message_reply (int fd, visca_message * reply)
     }
     n += 1;
     usleep (1);
-  } while (1);
+  } while (n < sizeof (reply->buffer) - 1);
 
   return TRUE;
 }
