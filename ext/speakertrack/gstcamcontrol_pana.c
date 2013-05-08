@@ -280,7 +280,7 @@ gst_cam_controller_pana_pan (GstCamControllerPana * pana, gint speed, gint v)
 
   g_print ("pana: pan(%d, %d)\n", speed, v);
 
-  sprintf (buf, "%02d", speed);
+  sprintf (buf, "%02d", v);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'P');
   pana_message_append (&msg, buf[0]);
@@ -290,28 +290,19 @@ gst_cam_controller_pana_pan (GstCamControllerPana * pana, gint speed, gint v)
     return FALSE;
   }
 
-  sprintf (buf, "%02d", speed);
-  pana_message_reset (&msg);
-  pana_message_append (&msg, '#');
-  pana_message_append (&msg, 'T');
-  pana_message_append (&msg, buf[0]);
-  pana_message_append (&msg, buf[1]);
-  pana_message_append (&msg, '\r');
-  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
-    return FALSE;
-  }
-
-  sprintf (buf, "%02d%02d", v, 0);
-  pana_message_reset (&msg);
-  pana_message_append (&msg, '#');
-  pana_message_append (&msg, 'U');
-  pana_message_append (&msg, buf[0]);
-  pana_message_append (&msg, buf[1]);
-  pana_message_append (&msg, buf[2]);
-  pana_message_append (&msg, buf[3]);
-  pana_message_append (&msg, '\r');
-
-  return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+  /*
+     sprintf (buf, "%02d%02d", v, 0);
+     pana_message_reset (&msg);
+     pana_message_append (&msg, '#');
+     pana_message_append (&msg, 'U');
+     pana_message_append (&msg, buf[0]);
+     pana_message_append (&msg, buf[1]);
+     pana_message_append (&msg, buf[2]);
+     pana_message_append (&msg, buf[3]);
+     pana_message_append (&msg, '\r');
+   */
+  //return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+  return TRUE;
 }
 
 static gboolean
@@ -322,17 +313,7 @@ gst_cam_controller_pana_tilt (GstCamControllerPana * pana, gint speed, gint v)
 
   g_print ("pana: tilt(%d, %d)\n", speed, v);
 
-  sprintf (buf, "%02d", speed);
-  pana_message_append (&msg, '#');
-  pana_message_append (&msg, 'P');
-  pana_message_append (&msg, buf[0]);
-  pana_message_append (&msg, buf[1]);
-  pana_message_append (&msg, '\r');
-  if (!pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ )) {
-    return FALSE;
-  }
-
-  sprintf (buf, "%02d", speed);
+  sprintf (buf, "%02d", v);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'T');
@@ -343,17 +324,19 @@ gst_cam_controller_pana_tilt (GstCamControllerPana * pana, gint speed, gint v)
     return FALSE;
   }
 
-  sprintf (buf, "%02d%02d", 0, v);
-  pana_message_reset (&msg);
-  pana_message_append (&msg, '#');
-  pana_message_append (&msg, 'U');
-  pana_message_append (&msg, buf[0]);
-  pana_message_append (&msg, buf[1]);
-  pana_message_append (&msg, buf[2]);
-  pana_message_append (&msg, buf[3]);
-  pana_message_append (&msg, '\r');
-
-  return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+  /*
+     sprintf (buf, "%02d%02d", 0, v);
+     pana_message_reset (&msg);
+     pana_message_append (&msg, '#');
+     pana_message_append (&msg, 'U');
+     pana_message_append (&msg, buf[0]);
+     pana_message_append (&msg, buf[1]);
+     pana_message_append (&msg, buf[2]);
+     pana_message_append (&msg, buf[3]);
+     pana_message_append (&msg, '\r');
+   */
+  //return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+  return TRUE;
 }
 
 static gboolean
@@ -365,7 +348,7 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
 
   g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
 
-  sprintf (buf, "%02d", speed);
+  sprintf (buf, "%02d", x);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'P');
   pana_message_append (&msg, buf[0]);
@@ -375,7 +358,7 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
     return FALSE;
   }
 
-  sprintf (buf, "%02d", speed);
+  sprintf (buf, "%02d", y);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'T');
@@ -386,17 +369,19 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
     return FALSE;
   }
 
-  sprintf (buf, "%02d%02d", x, y);
-  pana_message_reset (&msg);
-  pana_message_append (&msg, '#');
-  pana_message_append (&msg, 'U');
-  pana_message_append (&msg, buf[0]);
-  pana_message_append (&msg, buf[1]);
-  pana_message_append (&msg, buf[2]);
-  pana_message_append (&msg, buf[3]);
-  pana_message_append (&msg, '\r');
-
-  return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+  /*
+     sprintf (buf, "%02d%02d", x, y);
+     pana_message_reset (&msg);
+     pana_message_append (&msg, '#');
+     pana_message_append (&msg, 'U');
+     pana_message_append (&msg, buf[0]);
+     pana_message_append (&msg, buf[1]);
+     pana_message_append (&msg, buf[2]);
+     pana_message_append (&msg, buf[3]);
+     pana_message_append (&msg, '\r');
+   */
+  //return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+  return TRUE;
 }
 
 static gboolean
