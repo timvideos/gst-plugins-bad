@@ -410,7 +410,39 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
 
   g_print ("pana: zoom(%d)\n", z);
 
-  sprintf (buf, "%02d", speed);
+  /*
+     sprintf (buf, "%02d", speed);
+     pana_message_reset (&msg);
+     pana_message_append (&msg, '#');
+     pana_message_append (&msg, 'Z');
+     pana_message_append (&msg, buf[0]);
+     pana_message_append (&msg, buf[1]);
+     pana_message_append (&msg, '\r');
+
+     if (z == 0) {
+     } else if (z < 0) {
+     sprintf (buf, "%02d", -z);
+     pana_message_reset (&msg);
+     pana_message_append (&msg, '#');
+     pana_message_append (&msg, 'A');
+     pana_message_append (&msg, 'X');
+     pana_message_append (&msg, 'Z');
+     pana_message_append (&msg, buf[0]);
+     pana_message_append (&msg, buf[1]);
+     pana_message_append (&msg, '\r');
+     } else if (0 < z) {
+     sprintf (buf, "%02d", z);
+     pana_message_reset (&msg);
+     pana_message_append (&msg, '#');
+     pana_message_append (&msg, 'A');
+     pana_message_append (&msg, 'Y');
+     pana_message_append (&msg, 'Z');
+     pana_message_append (&msg, buf[0]);
+     pana_message_append (&msg, buf[1]);
+     pana_message_append (&msg, '\r');
+     }
+   */
+  sprintf (buf, "%02d", z);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'Z');
@@ -418,29 +450,7 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
   pana_message_append (&msg, buf[1]);
   pana_message_append (&msg, '\r');
 
-  if (z == 0) {
-  } else if (z < 0) {
-    sprintf (buf, "%02d", -z);
-    pana_message_reset (&msg);
-    pana_message_append (&msg, '#');
-    pana_message_append (&msg, 'A');
-    pana_message_append (&msg, 'X');
-    pana_message_append (&msg, 'Z');
-    pana_message_append (&msg, buf[0]);
-    pana_message_append (&msg, buf[1]);
-    pana_message_append (&msg, '\r');
-  } else if (0 < z) {
-    sprintf (buf, "%02d", z);
-    pana_message_reset (&msg);
-    pana_message_append (&msg, '#');
-    pana_message_append (&msg, 'A');
-    pana_message_append (&msg, 'Y');
-    pana_message_append (&msg, 'Z');
-    pana_message_append (&msg, buf[0]);
-    pana_message_append (&msg, buf[1]);
-    pana_message_append (&msg, '\r');
-  }
-
+  pana_message_reset (&reply);
   return pana_message_send_with_reply (pana->fd, &msg, &reply);
 }
 
