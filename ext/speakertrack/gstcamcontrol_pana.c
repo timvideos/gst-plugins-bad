@@ -116,6 +116,8 @@ pana_message_reply (int fd, pana_message * reply, char terminator)
     usleep (1);
   } while (n < sizeof (reply->buffer) - 1);
 
+  reply->len = n;
+
   return TRUE;
 }
 
