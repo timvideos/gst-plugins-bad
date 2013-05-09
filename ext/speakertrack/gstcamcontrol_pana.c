@@ -376,6 +376,8 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
   pana_message msg = { {0}, 0 };        //, reply;
   char buf[10];
 
+
+#if 0
   g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
 
   sprintf (buf, "%02d", x);
@@ -411,19 +413,35 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
      pana_message_reply (pana->fd, &msg, '\x03');
      g_print ("pana: tilt: %s\n", msg.buffer);
    */
+#else
+  char checksum = 0;
+  int n = 0;
 
-  /*
-     sprintf (buf, "%02d%02d", x, y);
-     pana_message_reset (&msg);
-     pana_message_append (&msg, '#');
-     pana_message_append (&msg, 'U');
-     pana_message_append (&msg, buf[0]);
-     pana_message_append (&msg, buf[1]);
-     pana_message_append (&msg, buf[2]);
-     pana_message_append (&msg, buf[3]);
-     pana_message_append (&msg, '\r');
-   */
+  g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
+
+  sprintf (buf, "%02d%02d", x, y);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'U');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, buf[2]);
+  pana_message_append (&msg, buf[3]);
+
+  for (n = 0; n < msg->len; ++n) {
+    checksum = (checksum + msg->buffer[n]) % 256;
+  }
+
+  if (checksum == 0)
+    checksum = 1;
+  else if (checksum == 0xd)
+    checksum = 0xe;
+
+  pana_message_append (&msg, (char) checksum);
+  pana_message_append (&msg, '\r');
+
   //return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+#endif
   return TRUE;
 }
 
