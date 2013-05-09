@@ -428,8 +428,8 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
   pana_message_append (&msg, buf[2]);
   pana_message_append (&msg, buf[3]);
 
-  for (n = 0; n < msg->len; ++n) {
-    checksum = (checksum + msg->buffer[n]) % 256;
+  for (n = 0; n < msg.len; ++n) {
+    checksum = (checksum + msg.buffer[n]) % 256;
   }
 
   if (checksum == 0)
