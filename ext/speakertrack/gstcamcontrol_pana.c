@@ -439,8 +439,11 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, double speed,
     y = 0;
   if (1.0 < y)
     y = 1.0;
+
   ix = (int) (x * (double) ((int) 0xFFFF));
-  iy = (int) (y * (double) ((int) 0xFFFF));
+  iy = (int) (y * (double) ((int) 0xFF00));
+  if (iy < 0x80)
+    iy = 0x80;
 
   g_print ("pana: move(%f, %f, %f) (%04x, %04x)\n", speed, x, y, ix, iy);
 
@@ -473,9 +476,11 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, double speed,
     return FALSE;
   }
 
-  pana_message_reset (&msg);
-  pana_message_reply (pana->fd, &msg, '\x03');
-  g_print ("pana: move: %s\n", msg.buffer);
+  /*
+     pana_message_reset (&msg);
+     pana_message_reply (pana->fd, &msg, '\x03');
+     g_print ("pana: move: %s\n", msg.buffer);
+   */
   return TRUE;
 #endif
 }
