@@ -442,7 +442,7 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, double speed,
   ix = (int) (x * (double) ((int) 0xFFFF));
   iy = (int) (y * (double) ((int) 0xFFFF));
 
-  g_print ("pana: move(%f, %f, %f)\n", speed, x, y);
+  g_print ("pana: move(%f, %f, %f) (%04x, %04x)\n", speed, x, y, ix, iy);
 
   sprintf (buf, "%04X%04X", ix, iy);
   pana_message_reset (&msg);
