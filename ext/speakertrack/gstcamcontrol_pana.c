@@ -498,7 +498,6 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, double speed,
     z = 0;
   if (1.0 < z)
     z = 1.0;
-  iz = (int) (z * 100);
 
   g_print ("pana: zoom(%f)\n", z);
 
@@ -539,6 +538,9 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, double speed,
      return pana_message_send_with_reply (pana->fd, &msg, &reply);
    */
 
+#if 0
+  iz = (int) (z * 100);
+
   sprintf (buf, "%02d", iz);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
@@ -546,6 +548,24 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, double speed,
   pana_message_append (&msg, buf[0]);
   pana_message_append (&msg, buf[1]);
   pana_message_append (&msg, '\r');
+
+#else
+
+  iz = (int) (z * 0x999);
+  if (iz < 1)
+    iz = 1;
+
+  sprintf (buf, "%04x", iz);
+  pana_message_reset (&msg);
+  pana_message_append (&msg, '#');
+  pana_message_append (&msg, 'A');
+  pana_message_append (&msg, 'Y');
+  pana_message_append (&msg, 'Z');
+  pana_message_append (&msg, buf[0]);
+  pana_message_append (&msg, buf[1]);
+  pana_message_append (&msg, '\r');
+
+#endif
 
   return pana_message_send (pana->fd, &msg);
 }
