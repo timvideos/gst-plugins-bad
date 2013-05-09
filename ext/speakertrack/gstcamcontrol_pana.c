@@ -413,6 +413,7 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
      pana_message_reply (pana->fd, &msg, '\x03');
      g_print ("pana: tilt: %s\n", msg.buffer);
    */
+  return TRUE;
 #else
   char checksum = 0;
   int n = 0;
@@ -440,9 +441,8 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
   pana_message_append (&msg, (char) checksum);
   pana_message_append (&msg, '\r');
 
-  //return pana_message_send /*_with_reply*/ (pana->fd, &msg /*, &reply */ );
+  return pana_message_send (pana->fd, &msg);
 #endif
-  return TRUE;
 }
 
 static gboolean
