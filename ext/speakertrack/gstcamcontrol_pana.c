@@ -373,9 +373,8 @@ static gboolean
 gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
     gint y)
 {
-  pana_message msg = { {0}, 0 };        //, reply;
-  char buf[10];
-
+  pana_message msg = { {0}, 0 };
+  char buf[32];
 
 #if 0
   g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
@@ -420,7 +419,7 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
 
   g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
 
-  sprintf (buf, "%02d%02d", x, y);
+  sprintf (buf, "%04X%04X", x, y);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'U');
@@ -428,6 +427,10 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
   pana_message_append (&msg, buf[1]);
   pana_message_append (&msg, buf[2]);
   pana_message_append (&msg, buf[3]);
+  pana_message_append (&msg, buf[4]);
+  pana_message_append (&msg, buf[5]);
+  pana_message_append (&msg, buf[6]);
+  pana_message_append (&msg, buf[7]);
 
   for (n = 0; n < msg.len; ++n) {
     checksum = (checksum + msg.buffer[n]) % 256;
