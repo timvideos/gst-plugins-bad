@@ -85,7 +85,7 @@ pana_message_dump (const pana_message * msg, const gchar * tag)
     else if (isprint (c))
       g_print ("%c", c);
     else
-      g_print ("\\x%02x", c);
+      g_print ("\\x%02x", (char) c);
   }
   g_print ("\n");
 }
@@ -290,14 +290,21 @@ gst_cam_controller_pana_open (GstCamControllerPana * pana, const char *dev)
 }
 
 static gboolean
-gst_cam_controller_pana_pan (GstCamControllerPana * pana, gint speed, gint v)
+gst_cam_controller_pana_pan (GstCamControllerPana * pana, double speed,
+    double v)
 {
   pana_message msg = { {0}, 0 };        //, reply;
   char buf[10];
+  int iv = 0;
+  if (v < 0.0)
+    v = 0;
+  if (1.0 < v)
+    v = 1.0;
+  iv = (int) (v * 100);
 
-  g_print ("pana: pan(%d, %d)\n", speed, v);
+  g_print ("pana: pan(%f, %f)\n", speed, v);
 
-  sprintf (buf, "%02d", v);
+  sprintf (buf, "%02d", iv);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'P');
@@ -330,14 +337,21 @@ gst_cam_controller_pana_pan (GstCamControllerPana * pana, gint speed, gint v)
 }
 
 static gboolean
-gst_cam_controller_pana_tilt (GstCamControllerPana * pana, gint speed, gint v)
+gst_cam_controller_pana_tilt (GstCamControllerPana * pana, double speed,
+    double v)
 {
   pana_message msg = { {0}, 0 };        //, reply;
   char buf[10];
+  int iv = 0;
+  if (v < 0.0)
+    v = 0;
+  if (1.0 < v)
+    v = 1.0;
+  iv = (int) (v * 100);
 
-  g_print ("pana: tilt(%d, %d)\n", speed, v);
+  g_print ("pana: tilt(%f, %f)\n", speed, v);
 
-  sprintf (buf, "%02d", v);
+  sprintf (buf, "%02d", iv);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'T');
@@ -370,14 +384,14 @@ gst_cam_controller_pana_tilt (GstCamControllerPana * pana, gint speed, gint v)
 }
 
 static gboolean
-gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
-    gint y)
+gst_cam_controller_pana_move (GstCamControllerPana * pana, double speed,
+    double x, double y)
 {
   pana_message msg = { {0}, 0 };
   char buf[32];
 
 #if 0
-  g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
+  g_print ("pana: move(%f, %f, %f)\n", speed, x, y);
 
   sprintf (buf, "%02d", x);
   pana_message_reset (&msg);
@@ -415,11 +429,22 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
   return TRUE;
 #else
   char checksum = 0;
-  int n = 0;
+  int n = 0, ix, iy;
 
-  g_print ("pana: move(%d, %d, %d)\n", speed, x, y);
+  if (x < 0.0)
+    x = 0;
+  if (1.0 < x)
+    x = 1.0;
+  if (y < 0.0)
+    y = 0;
+  if (1.0 < y)
+    y = 1.0;
+  ix = (int) (x * (double) ((int) 0xFFFF));
+  iy = (int) (y * (double) ((int) 0xFFFF));
 
-  sprintf (buf, "%04X%04X", x, y);
+  g_print ("pana: move(%f, %f, %f)\n", speed, x, y);
+
+  sprintf (buf, "%04X%04X", ix, iy);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'U');
@@ -444,18 +469,33 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, gint speed, gint x,
   pana_message_append (&msg, (char) checksum);
   pana_message_append (&msg, '\r');
 
-  return pana_message_send (pana->fd, &msg);
+  if (!pana_message_send (pana->fd, &msg)) {
+    return FALSE;
+  }
+
+  pana_message_reset (&msg);
+  pana_message_reply (pana->fd, &msg, '\x03');
+  g_print ("pana: move: %s\n", msg.buffer);
+  return TRUE;
 #endif
 }
 
 static gboolean
-gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
+gst_cam_controller_pana_zoom (GstCamControllerPana * pana, double speed,
+    double z)
 {
   pana_message msg = { {0}, 0 };
   //pana_message reply = { {0}, 0 };
   char buf[10];
+  int iz = 0;
 
-  g_print ("pana: zoom(%d)\n", z);
+  if (z < 0.0)
+    z = 0;
+  if (1.0 < z)
+    z = 1.0;
+  iz = (int) (z * 100);
+
+  g_print ("pana: zoom(%f)\n", z);
 
   /*
      sprintf (buf, "%02d", speed);
@@ -494,7 +534,7 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, gint speed, gint z)
      return pana_message_send_with_reply (pana->fd, &msg, &reply);
    */
 
-  sprintf (buf, "%02d", z);
+  sprintf (buf, "%02d", iz);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'Z');
