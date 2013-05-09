@@ -172,7 +172,7 @@ gst_cam_controller_close (GstCamController * controller)
 }
 
 /*static*/ gboolean
-gst_cam_controller_pan (GstCamController * controller, gint x, gint y)
+gst_cam_controller_pan (GstCamController * controller, double x, double y)
 {
   GstCamControllerClass *ccc =
       GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
@@ -182,7 +182,7 @@ gst_cam_controller_pan (GstCamController * controller, gint x, gint y)
 }
 
 /*static*/ gboolean
-gst_cam_controller_tilt (GstCamController * controller, gint x, gint y)
+gst_cam_controller_tilt (GstCamController * controller, double x, double y)
 {
   GstCamControllerClass *ccc =
       GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
@@ -192,7 +192,8 @@ gst_cam_controller_tilt (GstCamController * controller, gint x, gint y)
 }
 
 /*static*/ gboolean
-gst_cam_controller_move (GstCamController * controller, gint s, gint x, gint y)
+gst_cam_controller_move (GstCamController * controller, double s, double x,
+    double y)
 {
   GstCamControllerClass *ccc =
       GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
@@ -202,7 +203,7 @@ gst_cam_controller_move (GstCamController * controller, gint s, gint x, gint y)
 }
 
 /*static*/ gboolean
-gst_cam_controller_zoom (GstCamController * controller, gint x, gint y)
+gst_cam_controller_zoom (GstCamController * controller, double x, double y)
 {
   GstCamControllerClass *ccc =
       GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
