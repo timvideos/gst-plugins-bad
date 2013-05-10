@@ -329,21 +329,30 @@ gst_cam_control_get_property (GObject * object, guint prop_id,
 static void
 gst_cam_control_face_track (GstCamcontrol * camctl, const GstStructure * s)
 {
-  guint fx, fy, fw, fh, x, y, z;
+  guint fx, fy, fw, fh, vw, vh;
+  double x, y, z;
+  fx = fy = fw = fh = vw = vh = 0;
   gst_structure_get_uint (s, "x", &fx);
   gst_structure_get_uint (s, "y", &fy);
   gst_structure_get_uint (s, "width", &fw);
   gst_structure_get_uint (s, "height", &fh);
+  gst_structure_get_uint (s, "vwidth", &vw);
+  gst_structure_get_uint (s, "vheight", &vh);
 
-  x = fx + fw * 0.5;
-  y = fy + fh * 0.5;
-  z = 0;
+  if (vw < 1.0)
+    vw = 1.0;
+  if (vh < 1.0)
+    vh = 1.0;
+
+  x = ((double) fx + (double) fw * 0.5) / (double) vw;
+  y = ((double) fy + (double) fh * 0.5) / (double) vh;
+  z = 0.0;
 
   if (camctl->controller) {
-    gst_cam_controller_move (camctl->controller, 100, x, y);
-    gst_cam_controller_zoom (camctl->controller, 100, z);
+    gst_cam_controller_move (camctl->controller, 1.0, x, y);
+    gst_cam_controller_zoom (camctl->controller, 1.0, z);
   } else {
-    g_print ("camctl: (%d, %d)\n", x, y);
+    g_print ("camctl: (%f, %f) (%d, %d)\n", x, y, vw, vh);
   }
 }
 

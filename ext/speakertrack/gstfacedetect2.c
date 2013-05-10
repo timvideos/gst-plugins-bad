@@ -801,7 +801,10 @@ gst_face_detect2_transform_ip (GstOpencvVideoFilter * base, GstBuffer * buf,
     s = gst_structure_new ("face",
         "x", G_TYPE_UINT, r->x,
         "y", G_TYPE_UINT, r->y,
-        "width", G_TYPE_UINT, r->width, "height", G_TYPE_UINT, r->height, NULL);
+        "width", G_TYPE_UINT, r->width,
+        "height", G_TYPE_UINT, r->height,
+        "vwidth", G_TYPE_UINT, img->width,
+        "vheight", G_TYPE_UINT, img->height, NULL);
     if (have_nose) {
       CvRect *sr = (CvRect *) cvGetSeqElem (nose, 0);
       GST_LOG_OBJECT (detect, "nose/%d: x,y = %4u,%4u: w.h = %4u,%4u",
