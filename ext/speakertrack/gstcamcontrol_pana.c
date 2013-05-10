@@ -552,10 +552,10 @@ gst_cam_controller_pana_zoom (GstCamControllerPana * pana, double speed,
 #else
 
   iz = (int) (z * (double) ((int) 0x999));
-  if (iz < 0x555)
-    iz = 0x555;
+  //if (iz < 0x555)
+  //  iz = 0x555;
 
-  sprintf (buf, "%03x", iz);
+  sprintf (buf, "%03d", iz);
   pana_message_reset (&msg);
   pana_message_append (&msg, '#');
   pana_message_append (&msg, 'A');
