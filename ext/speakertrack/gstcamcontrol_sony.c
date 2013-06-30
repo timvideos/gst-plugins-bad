@@ -47,78 +47,77 @@
 #  include <config.h>
 #endif
 
-#include "gstcamcontrol_visca_sony.h"
+#include "gstcamcontrol_sony.h"
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 
-G_DEFINE_TYPE (GstCamControllerViscaSony, gst_cam_controller_visca_sony,
+G_DEFINE_TYPE (GstCamControllerSony, gst_cam_controller_sony,
     GST_TYPE_CAM_CONTROLLER);
 
 static void
-gst_cam_controller_visca_sony_init (GstCamControllerViscaSony * visca_sony)
+gst_cam_controller_sony_init (GstCamControllerSony * sony)
 {
-  visca_sony->sony = sony_visca_new ();
+  sony->sony = sony_visca_new ();
 }
 
 static void
-gst_cam_controller_visca_sony_finalize (GstCamControllerViscaSony * visca_sony)
+gst_cam_controller_sony_finalize (GstCamControllerSony * sony)
 {
-  sony_visca_close (visca_sony->sony);
-  sony_visca_free (visca_sony->sony);
-  visca_sony->sony = NULL;
+  sony_visca_close (sony->sony);
+  sony_visca_free (sony->sony);
+  sony->sony = NULL;
 
-  G_OBJECT_CLASS (gst_cam_controller_visca_sony_parent_class)
-      ->finalize (G_OBJECT (visca_sony));
+  G_OBJECT_CLASS (gst_cam_controller_sony_parent_class)
+      ->finalize (G_OBJECT (sony));
 }
 
 static void
-gst_cam_controller_visca_sony_close (GstCamControllerViscaSony * visca_sony)
+gst_cam_controller_sony_close (GstCamControllerSony * sony)
 {
-  g_print ("visca_sony: close()\n");
-  sony_visca_close (visca_sony->sony);
+  g_print ("sony: close()\n");
+  sony_visca_close (sony->sony);
 }
 
 static gboolean
-gst_cam_controller_visca_sony_open (GstCamControllerViscaSony * visca_sony,
-    const char *dev)
+gst_cam_controller_sony_open (GstCamControllerSony * sony, const char *dev)
 {
-  g_print ("visca_sony: open(%s)\n", dev);
-  sony_visca_open (visca_sony->sony, dev);
+  g_print ("sony: open(%s)\n", dev);
+  sony_visca_open (sony->sony, dev);
   return TRUE;
 }
 
 static gboolean
-gst_cam_controller_visca_sony_pan (GstCamControllerViscaSony * visca_sony,
+gst_cam_controller_sony_pan (GstCamControllerSony * sony,
     double speed, double v)
 {
   double d = ((double) v) / 100.0;
   g_print ("pan: %f\n", d);
-  sony_visca_pan (visca_sony->sony, d);
+  sony_visca_pan (sony->sony, d);
   return TRUE;
 }
 
 static gboolean
-gst_cam_controller_visca_sony_tilt (GstCamControllerViscaSony * visca_sony,
+gst_cam_controller_sony_tilt (GstCamControllerSony * sony,
     double speed, double v)
 {
   double d = 1.0 - v;           //((double) v) / 100.0;
   g_print ("tilt: %f\n", d);
-  sony_visca_tilt (visca_sony->sony, d);
+  sony_visca_tilt (sony->sony, d);
   return TRUE;
 }
 
 static gboolean
-gst_cam_controller_visca_sony_move (GstCamControllerViscaSony * visca_sony,
+gst_cam_controller_sony_move (GstCamControllerSony * sony,
     double speed, double x, double y)
 {
   double dx = x;                //((double) x) / 100.0;
   double dy = 1.0 - y;          //((double) y) / 100.0;
   g_print ("move: %f, %f\n", dx, dy);
-  sony_visca_pan (visca_sony->sony, dx);
-  sony_visca_tilt (visca_sony->sony, dy);
+  sony_visca_pan (sony->sony, dx);
+  sony_visca_tilt (sony->sony, dy);
   return TRUE;
 }
 
@@ -130,32 +129,25 @@ gst_cam_controller_visca_sony_move (GstCamControllerViscaSony * visca_sony,
  *  @return TRUE if commands sent.
  */
 static gboolean
-gst_cam_controller_visca_sony_zoom (GstCamControllerViscaSony * visca_sony,
+gst_cam_controller_sony_zoom (GstCamControllerSony * sony,
     double speed, double z)
 {
-  sony_visca_zoom (visca_sony->sony, z);
+  sony_visca_zoom (sony->sony, z);
   return TRUE;
 }
 
 static void
-gst_cam_controller_visca_sony_class_init (GstCamControllerViscaSonyClass *
-    visca_sonyclass)
+gst_cam_controller_sony_class_init (GstCamControllerSonyClass * sonyclass)
 {
-  GObjectClass *object_class = G_OBJECT_CLASS (visca_sonyclass);
-  GstCamControllerClass *camctl_class =
-      GST_CAM_CONTROLLER_CLASS (visca_sonyclass);
+  GObjectClass *object_class = G_OBJECT_CLASS (sonyclass);
+  GstCamControllerClass *camctl_class = GST_CAM_CONTROLLER_CLASS (sonyclass);
   object_class->finalize = GST_DEBUG_FUNCPTR ((GObjectFinalizeFunc)
-      gst_cam_controller_visca_sony_finalize);
-  camctl_class->open =
-      (GstCamControllerOpenFunc) gst_cam_controller_visca_sony_open;
+      gst_cam_controller_sony_finalize);
+  camctl_class->open = (GstCamControllerOpenFunc) gst_cam_controller_sony_open;
   camctl_class->close =
-      (GstCamControllerCloseFunc) gst_cam_controller_visca_sony_close;
-  camctl_class->pan =
-      (GstCamControllerPanFunc) gst_cam_controller_visca_sony_pan;
-  camctl_class->tilt =
-      (GstCamControllerTiltFunc) gst_cam_controller_visca_sony_tilt;
-  camctl_class->move =
-      (GstCamControllerMoveFunc) gst_cam_controller_visca_sony_move;
-  camctl_class->zoom =
-      (GstCamControllerZoomFunc) gst_cam_controller_visca_sony_zoom;
+      (GstCamControllerCloseFunc) gst_cam_controller_sony_close;
+  camctl_class->pan = (GstCamControllerPanFunc) gst_cam_controller_sony_pan;
+  camctl_class->tilt = (GstCamControllerTiltFunc) gst_cam_controller_sony_tilt;
+  camctl_class->move = (GstCamControllerMoveFunc) gst_cam_controller_sony_move;
+  camctl_class->zoom = (GstCamControllerZoomFunc) gst_cam_controller_sony_zoom;
 }

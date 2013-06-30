@@ -25,34 +25,29 @@
 
 /*! @file */
 
-#ifndef __GST_CAM_CONTROLLER_VISCA_H__by_Duzy_Chan__
-#define __GST_CAM_CONTROLLER_VISCA_H__by_Duzy_Chan__ 1
+#ifndef __GST_CAM_CONTROLLER_SONY_H__by_Duzy_Chan__
+#define __GST_CAM_CONTROLLER_SONY_H__by_Duzy_Chan__ 1
 #include "gstcamcontrol.h"
-#include <termios.h>
+#include "visca_sony/visca.h"
 
-#define GST_TYPE_CAM_CONTROLLER_VISCA (gst_cam_controller_visca_get_type ())
-#define GST_CAM_CONTROLLER_VISCA(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), GST_TYPE_CAM_CONTROLLER_VISCA, GstCamControllerVisca))
-#define GST_CAM_CONTROLLER_VISCA_CLASS(class) (G_TYPE_CHECK_CLASS_CAST ((class), GST_TYPE_CAM_CONTROLLER_VISCA, GstCamControllerViscaClass))
-#define GST_IS_CAM_CONTROLLER_VISCA(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), GST_TYPE_CAM_CONTROLLER_VISCA))
-#define GST_IS_CAM_CONTROLLER_VISCA_CLASS(class) (G_TYPE_CHECK_CLASS_TYPE ((class), GST_TYPE_CAM_CONTROLLER_VISCA))
+#define GST_TYPE_CAM_CONTROLLER_SONY (gst_cam_controller_sony_get_type ())
+#define GST_CAM_CONTROLLER_SONY(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), GST_TYPE_CAM_CONTROLLER_SONY, GstCamControllerSony))
+#define GST_CAM_CONTROLLER_SONY_CLASS(class) (G_TYPE_CHECK_CLASS_CAST ((class), GST_TYPE_CAM_CONTROLLER_SONY, GstCamControllerSonyClass))
+#define GST_IS_CAM_CONTROLLER_SONY(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), GST_TYPE_CAM_CONTROLLER_SONY))
+#define GST_IS_CAM_CONTROLLER_SONY_CLASS(class) (G_TYPE_CHECK_CLASS_TYPE ((class), GST_TYPE_CAM_CONTROLLER_SONY))
 
-typedef struct _GstCamControllerVisca
+typedef struct _GstCamControllerSony
 {
   GstCamController base;
 
-  const char *device;
-  struct termios options;
-  gint fd;
-  guint zoom_speed;
-  guint pan_speed;
-  guint tilt_speed;
-} GstCamControllerVisca;
+  SonyVisca *sony;
+} GstCamControllerSony;
 
-typedef struct _GstCamControllerViscaClass
+typedef struct _GstCamControllerSonyClass
 {
   GstCamControllerClass base_class;
-} GstCamControllerViscaClass;
+} GstCamControllerSonyClass;
 
-GType gst_cam_controller_visca_get_type (void);
+GType gst_cam_controller_sony_get_type (void);
 
-#endif //__GST_CAM_CONTROLLER_VISCA_H__by_Duzy_Chan__
+#endif //__GST_CAM_CONTROLLER_SONY_H__by_Duzy_Chan__
