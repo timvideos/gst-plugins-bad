@@ -138,10 +138,10 @@ GstCamController *
 gst_cam_controller_new (const char *protocol)
 {
   GstCamController *controller = NULL;
-  if (strcmp (protocol, "visca") == 0) {
+  if (strcmp (protocol, "canon") == 0) {
     controller =
         GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_CANON, NULL));
-  } else if (strcmp (protocol, "visca-sony") == 0) {
+  } else if (strcmp (protocol, "sony") == 0) {
     controller =
         GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_SONY, NULL));
   } else if (strcmp (protocol, "pana") == 0) {
