@@ -25,29 +25,34 @@
 
 /*! @file */
 
-#ifndef __GST_CAM_CONTROLLER_VISCA_SONY_H__by_Duzy_Chan__
-#define __GST_CAM_CONTROLLER_VISCA_SONY_H__by_Duzy_Chan__ 1
+#ifndef __GST_CAM_CONTROLLER_CANON_H__by_Duzy_Chan__
+#define __GST_CAM_CONTROLLER_CANON_H__by_Duzy_Chan__ 1
 #include "gstcamcontrol.h"
-#include "visca_sony/visca.h"
+#include <termios.h>
 
-#define GST_TYPE_CAM_CONTROLLER_VISCA_SONY (gst_cam_controller_visca_sony_get_type ())
-#define GST_CAM_CONTROLLER_VISCA_SONY(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), GST_TYPE_CAM_CONTROLLER_VISCA_SONY, GstCamControllerViscaSony))
-#define GST_CAM_CONTROLLER_VISCA_SONY_CLASS(class) (G_TYPE_CHECK_CLASS_CAST ((class), GST_TYPE_CAM_CONTROLLER_VISCA_SONY, GstCamControllerViscaSonyClass))
-#define GST_IS_CAM_CONTROLLER_VISCA_SONY(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), GST_TYPE_CAM_CONTROLLER_VISCA_SONY))
-#define GST_IS_CAM_CONTROLLER_VISCA_SONY_CLASS(class) (G_TYPE_CHECK_CLASS_TYPE ((class), GST_TYPE_CAM_CONTROLLER_VISCA_SONY))
+#define GST_TYPE_CAM_CONTROLLER_CANON (gst_cam_controller_canon_get_type ())
+#define GST_CAM_CONTROLLER_CANON(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), GST_TYPE_CAM_CONTROLLER_CANON, GstCamControllerCanon))
+#define GST_CAM_CONTROLLER_CANON_CLASS(class) (G_TYPE_CHECK_CLASS_CAST ((class), GST_TYPE_CAM_CONTROLLER_CANON, GstCamControllerCanonClass))
+#define GST_IS_CAM_CONTROLLER_CANON(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), GST_TYPE_CAM_CONTROLLER_CANON))
+#define GST_IS_CAM_CONTROLLER_CANON_CLASS(class) (G_TYPE_CHECK_CLASS_TYPE ((class), GST_TYPE_CAM_CONTROLLER_CANON))
 
-typedef struct _GstCamControllerViscaSony
+typedef struct _GstCamControllerCanon
 {
   GstCamController base;
 
-  SonyVisca *sony;
-} GstCamControllerViscaSony;
+  const char *device;
+  struct termios options;
+  gint fd;
+  guint zoom_speed;
+  guint pan_speed;
+  guint tilt_speed;
+} GstCamControllerCanon;
 
-typedef struct _GstCamControllerViscaSonyClass
+typedef struct _GstCamControllerCanonClass
 {
   GstCamControllerClass base_class;
-} GstCamControllerViscaSonyClass;
+} GstCamControllerCanonClass;
 
-GType gst_cam_controller_visca_sony_get_type (void);
+GType gst_cam_controller_canon_get_type (void);
 
-#endif //__GST_CAM_CONTROLLER_VISCA_SONY_H__by_Duzy_Chan__
+#endif //__GST_CAM_CONTROLLER_CANON_H__by_Duzy_Chan__

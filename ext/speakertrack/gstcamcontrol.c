@@ -74,8 +74,8 @@
 #include <string.h>
 
 #include "gstcamcontrol.h"
-#include "gstcamcontrol_visca.h"
-#include "gstcamcontrol_visca_sony.h"
+#include "gstcamcontrol_canon.h"
+#include "gstcamcontrol_sony.h"
 #include "gstcamcontrol_pana.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_cam_control_debug);
@@ -140,11 +140,10 @@ gst_cam_controller_new (const char *protocol)
   GstCamController *controller = NULL;
   if (strcmp (protocol, "visca") == 0) {
     controller =
-        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_VISCA, NULL));
+        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_CANON, NULL));
   } else if (strcmp (protocol, "visca-sony") == 0) {
     controller =
-        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_VISCA_SONY,
-            NULL));
+        GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_SONY, NULL));
   } else if (strcmp (protocol, "pana") == 0) {
     controller =
         GST_CAM_CONTROLLER (g_object_new (GST_TYPE_CAM_CONTROLLER_PANA, NULL));

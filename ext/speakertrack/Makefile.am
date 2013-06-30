@@ -3,8 +3,8 @@ lib_LTLIBRARIES = libgstcamcontrol-@GST_API_VERSION@.la
 camcontrol_sources = \
 	gstcamcontrol.c \
 	gstcamcontrol_pana.c \
-	gstcamcontrol_visca.c \
-	gstcamcontrol_visca_sony.c
+	gstcamcontrol_canon.c \
+	gstcamcontrol_sony.c
 
 sony_visca_sources = \
 	visca_sony/commands.cpp \

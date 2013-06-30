@@ -10,8 +10,8 @@
 #include <unistd.h>
 #include <math.h>
 #include "gstcamcontrol_pana.c"
-#include "gstcamcontrol_visca.c"
-#include "gstcamcontrol_visca_sony.c"
+#include "gstcamcontrol_canon.c"
+#include "gstcamcontrol_sony.c"
 #include "gstcamcontrol.c"
 
 static void
@@ -37,8 +37,8 @@ run (GstCamController * ctrl, const char *name)
 static int
 run_visca (const char *name)
 {
-  GstCamControllerVisca *visca =
-      GST_CAM_CONTROLLER_VISCA (g_object_new (GST_TYPE_CAM_CONTROLLER_VISCA,
+  GstCamControllerCanon *visca =
+      GST_CAM_CONTROLLER_CANON (g_object_new (GST_TYPE_CAM_CONTROLLER_CANON,
           NULL));
 
   run ((GstCamController *) visca, name);
