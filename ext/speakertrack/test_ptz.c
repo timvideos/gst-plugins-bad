@@ -17,16 +17,18 @@
 static void
 run (GstCamController * ctrl, const char *name)
 {
+  double x = 0, y = 0;
+
   if (!gst_cam_controller_open (ctrl, name)) {
-    fprintf (stderr, "can't open: %s", name);
+    fprintf (stderr, "can't open: %s\n", name);
     return;
   }
 
-  for (int n = 0, x = 0, y = 0; n < 100; ++n) {
-    x += 10;
-    y += 10;
-    if (gst_cam_controller_move (ctrl, 100, x, y)) {
-      fprintf (stderr, "can't move: (%d, %d)", x, y);
+  for (int n = 0; n < 100; ++n) {
+    x = sin ((double) n);
+    y = cos ((double) n);
+    if (gst_cam_controller_move (ctrl, 0.8, y, y) != TRUE) {
+      fprintf (stderr, "can't move: (%lf, %lf)\n", x, y);
     }
     usleep (100000);
   }
@@ -51,7 +53,7 @@ int
 main (int argc, char **argv)
 {
   if (argc < 2) {
-    fprintf (stderr, "bad arguments");
+    fprintf (stderr, "bad arguments\n");
     return -1;
   }
   return run_visca (argv[1]);

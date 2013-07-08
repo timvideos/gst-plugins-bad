@@ -105,9 +105,10 @@ canon_message_reset (canon_message * msg)
 static gboolean
 canon_message_send (int fd, const canon_message * msg)
 {
-  int len = 1 + msg->len + 1;
+  int len = 1 + msg->len + 1, n;
   char b[32];
   if (msg->len <= 0 || sizeof (b) <= len || 7 < msg->address) {
+    g_print ("canon_message_send: %d, %d", msg->len, msg->address);
     return FALSE;
   }
 
@@ -125,12 +126,17 @@ canon_message_send (int fd, const canon_message * msg)
   memcpy (&b[1], msg->buffer, msg->len);
   b[1 + msg->len] = CANON_TERMINATOR;
 
-  if (write (fd, msg->buffer, msg->len) < msg->len) {
+  n = write (fd, msg->buffer, msg->len);
+  if (n < msg->len) {
+    g_print ("wrote: %d != %d\n", n, msg->len);
     return FALSE;
   }
+
+  g_print ("wrote: %d != %d\n", n, msg->len);
   return TRUE;
 }
 
+/*
 static gboolean
 canon_message_reply (int fd, canon_message * reply)
 {
@@ -154,6 +160,7 @@ canon_message_reply (int fd, canon_message * reply)
 
   return TRUE;
 }
+*/
 
 static gboolean
 canon_message_send_with_reply (int fd, const canon_message * msg,
@@ -162,7 +169,8 @@ canon_message_send_with_reply (int fd, const canon_message * msg,
   if (!canon_message_send (fd, msg)) {
     return FALSE;
   }
-  return canon_message_reply (fd, reply);
+  //return canon_message_reply (fd, reply);
+  return TRUE;
 }
 
 static void
@@ -221,21 +229,32 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   /* Setting port parameters */
   tcgetattr (canon->fd, &canon->options);
 
+  /**
+ RS-232C Conformity Connector & Pin assignment of connector are referred to 2.2 
+ Transmission Mode : Half Duplex (Full duplex for notification) 
+ Transfer Speed : 4800, 9600, 14400, 19200bps. (selected through menu window) 
+ Data Bit : 8 bit 
+ Parity : None 
+ Stop Bit : 1 bit or 2 bit (selected through menu window) 
+ Handshake : RTS/CTS Control 
+   */
   /* control flags */
   //cfsetispeed(&canon->options, B2400);
   //cfsetispeed(&canon->options, B4800);
-  cfsetispeed (&canon->options, B9600);
-  //cfsetispeed(&canon->options, B19200);
+  //cfsetispeed (&canon->options, B9600);
+  cfsetispeed (&canon->options, B19200);
   //cfsetispeed(&canon->options, B38400);
   //cfsetispeed(&canon->options, B57600);
   //cfsetispeed(&canon->options, B115200);
   //cfsetispeed(&canon->options, B230400);
   cfsetospeed (&canon->options, B9600);
   canon->options.c_cflag &= ~PARENB;    /* No parity  */
-  canon->options.c_cflag &= ~CSTOPB;    /*            */
+  canon->options.c_cflag &= ~CSTOPB;    /*  one stop bit          */
+  //canon->options.c_cflag |= CSTOPB;     /*  two stop bits         */
   canon->options.c_cflag &= ~CSIZE;     /* 8bit       */
   canon->options.c_cflag |= CS8;        /*            */
-  canon->options.c_cflag &= ~CRTSCTS;   /* No hdw ctl */
+  //canon->options.c_cflag &= ~CRTSCTS;   /* No hdw ctl */
+  canon->options.c_cflag |= CRTSCTS;    /* Enable  RTS/CTS */
 
   /* local flags */
   canon->options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);    /* raw input */
