@@ -22,6 +22,7 @@ run (GstCamController * ctrl, const char *name)
     return;
   }
   //gst_cam_controller_move (ctrl, 0.8, x, y);
+
 #if 0
   for (int n = 0; n < 100; ++n) {
     double x = sin ((double) n);
