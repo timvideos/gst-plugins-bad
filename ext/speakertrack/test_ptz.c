@@ -17,21 +17,41 @@
 static void
 run (GstCamController * ctrl, const char *name)
 {
-  double x = 0, y = 0;
-
   if (!gst_cam_controller_open (ctrl, name)) {
     fprintf (stderr, "can't open: %s\n", name);
     return;
   }
-
+  //gst_cam_controller_move (ctrl, 0.8, x, y);
+#if 0
   for (int n = 0; n < 100; ++n) {
-    x = sin ((double) n);
-    y = cos ((double) n);
-    if (gst_cam_controller_move (ctrl, 0.8, y, y) != TRUE) {
+    double x = sin ((double) n);
+    double y = cos ((double) n);
+    if (gst_cam_controller_move (ctrl, 0.8, x, y) != TRUE) {
       fprintf (stderr, "can't move: (%lf, %lf)\n", x, y);
     }
     usleep (100000);
   }
+#endif
+
+  gst_cam_controller_pan (ctrl, 0.8, -1);
+  usleep (3000000);
+  gst_cam_controller_pan (ctrl, 0.8, 0);
+  usleep (100000);
+
+  gst_cam_controller_pan (ctrl, 0.8, 1);
+  usleep (3000000);
+  gst_cam_controller_pan (ctrl, 0.8, 0);
+  usleep (100000);
+
+  gst_cam_controller_tilt (ctrl, 0.8, -1);
+  usleep (3000000);
+  gst_cam_controller_tilt (ctrl, 0.8, 0);
+  usleep (100000);
+
+  gst_cam_controller_tilt (ctrl, 0.8, 1);
+  usleep (3000000);
+  gst_cam_controller_tilt (ctrl, 0.8, 0);
+  usleep (100000);
 
   gst_cam_controller_close (ctrl);
 }
