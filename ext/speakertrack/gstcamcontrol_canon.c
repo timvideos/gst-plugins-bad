@@ -87,7 +87,7 @@ G_DEFINE_TYPE (GstCamControllerCanon, gst_cam_controller_canon,
 
 typedef struct _canon_message
 {
-  char buffer[128];             // 32 bytes for one command max
+  char buffer[256];             // 32 bytes for one command max
   int len;
   int address;
 } canon_message;
@@ -120,10 +120,12 @@ canon_message_dump (const canon_message * msg, const gchar * tag)
     int c = msg->buffer[n];
     if (c == '\r')
       g_print ("\\r");
-    else if (isprint (c))
-      g_print ("%c", c);
+    /*
+       else if (isprint (c))
+       g_print ("%c", c);
+     */
     else
-      g_print ("\\x%02x", (char) c);
+      g_print ("\\x%02X", (unsigned char) c);
   }
   g_print ("\n");
 }
