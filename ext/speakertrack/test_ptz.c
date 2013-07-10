@@ -77,5 +77,8 @@ main (int argc, char **argv)
     fprintf (stderr, "bad arguments\n");
     return -1;
   }
+#if GLIB_MAJOR_VERSION <= 2 && GLIB_MINOR_VERSION <= 3 && GLIB_MICRO_VERSION <= 2
+  g_type_init ();
+#endif
   return run_visca (argv[1]);
 }
