@@ -132,8 +132,7 @@ canon_message_send (int fd, const canon_message * msg)
     g_print ("wrote: %d != %d\n", n, msg->len);
     return FALSE;
   }
-
-  g_print ("wrote: %d != %d\n", n, msg->len);
+  //g_print ("wrote: %d, %d\n", n, msg->len);
   return TRUE;
 }
 
