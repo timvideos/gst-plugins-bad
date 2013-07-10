@@ -83,13 +83,14 @@ G_DEFINE_TYPE (GstCamControllerCanon, gst_cam_controller_canon,
 #define CANON_PT_RESET                   0x05
 #define CANON_PT_LIMITSET                0x07
 
-#define canon_message_init(a) { {0}, 0, (a) }
+//#define canon_message_init(a) { {0}, 0, (a) }
+#define canon_message_init(a) { {0}, 0 }
 
 typedef struct _canon_message
 {
   char buffer[256];             // 32 bytes for one command max
   int len;
-  int address;
+  //int address;
 } canon_message;
 
 static void
@@ -134,22 +135,24 @@ static gboolean
 canon_message_send (int fd, const canon_message * msg)
 {
   int len = 1 + msg->len + 1, n;
-  char b[32];
-  if (msg->len <= 0 || sizeof (b) <= len || 7 < msg->address) {
-    g_print ("canon_message_send: %d, %d", msg->len, msg->address);
+  char b[256];
+  if (msg->len <= 0 || sizeof (b) <= len /*|| 7 < msg->address */ ) {
+    g_print ("canon_message_send: %d\n", msg->len /*, msg->address */ );
     return FALSE;
   }
 
-  b[0] = 0x80;
-  b[0] |= (msg->address << 4);
-#if 0
-  if (0 < broadcast) {
-    b[0] |= (broadcast << 3);
-    b[0] &= 0xF8;
-  } else {
-    b[0] |= camera_address;
-  }
-#endif
+  /*
+     b[0] = 0x80;
+     b[0] |= (msg->address << 4);
+     #if 0
+     if (0 < broadcast) {
+     b[0] |= (broadcast << 3);
+     b[0] &= 0xF8;
+     } else {
+     b[0] |= camera_address;
+     }
+     #endif
+   */
 
   memcpy (&b[1], msg->buffer, msg->len);
   b[1 + msg->len] = CANON_TERMINATOR;
