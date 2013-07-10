@@ -54,6 +54,8 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <stdio.h>
+#include <string.h>
+#include <ctype.h>
 
 G_DEFINE_TYPE (GstCamControllerCanon, gst_cam_controller_canon,
     GST_TYPE_CAM_CONTROLLER);
@@ -103,6 +105,29 @@ canon_message_reset (canon_message * msg)
   bzero (msg->buffer, sizeof (msg->buffer));
 }
 
+static void
+canon_message_dump (const canon_message * msg, const gchar * tag)
+{
+  int n;
+
+  g_print ("%s: ", tag);
+  if (msg->len <= 0) {
+    g_print ("(empty message)\n");
+    return;
+  }
+
+  for (n = 0; n < msg->len; ++n) {
+    int c = msg->buffer[n];
+    if (c == '\r')
+      g_print ("\\r");
+    else if (isprint (c))
+      g_print ("%c", c);
+    else
+      g_print ("\\x%02x", (char) c);
+  }
+  g_print ("\n");
+}
+
 static gboolean
 canon_message_send (int fd, const canon_message * msg)
 {
@@ -132,6 +157,8 @@ canon_message_send (int fd, const canon_message * msg)
     g_print ("wrote: %d != %d\n", n, msg->len);
     return FALSE;
   }
+
+  canon_message_dump (msg, "sent");
   //g_print ("wrote: %d, %d\n", n, msg->len);
   return TRUE;
 }
