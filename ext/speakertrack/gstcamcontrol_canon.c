@@ -87,7 +87,7 @@ G_DEFINE_TYPE (GstCamControllerCanon, gst_cam_controller_canon,
 
 typedef struct _canon_message
 {
-  char buffer[32];              // 32 bytes for one command max
+  char buffer[128];             // 32 bytes for one command max
   int len;
   int address;
 } canon_message;
@@ -237,6 +237,9 @@ gst_cam_controller_canon_close (GstCamControllerCanon * canon)
 static gboolean
 gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
 {
+  canon_message msg = canon_message_init (0);
+  canon_message reply = canon_message_init (0);
+
   g_print ("canon: open(%s)\n", dev);
 
   if (0 < canon->fd) {
@@ -298,6 +301,68 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon->options.c_oflag &= ~OPOST;     /* raw output */
 
   tcsetattr (canon->fd, TCSANOW, &canon->options);
+
+  //////////////////////////////////////////////////
+
+  //FF 30 30 00 86 30 EF
+  //FF 30 30 00 58 30 EF
+  //FF 30 30 00 91 33 30 30 30 31 30 32 EF
+  //FF 30 30 00 91 35 31 32 33 34 35 36 EF
+  //FF 30 30 00 86 30 EF
+
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x86);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x58);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x91);
+  canon_message_append (&msg, 0x33);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x32);
+  canon_message_append (&msg, 0xEF);
+
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x91);
+  canon_message_append (&msg, 0x35);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x32);
+  canon_message_append (&msg, 0x33);
+  canon_message_append (&msg, 0x34);
+  canon_message_append (&msg, 0x35);
+  canon_message_append (&msg, 0x36);
+  canon_message_append (&msg, 0xEF);
+
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x86);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
   return TRUE;
 }
 
