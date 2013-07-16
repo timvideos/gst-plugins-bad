@@ -147,35 +147,57 @@ canon_message_send (int fd, const canon_message * msg)
   return TRUE;
 }
 
+static int
+canon_message_read_some (int fd, char *out, int sz)
+{
+  int n = 0, num = 0, available_bytes = 0;
+  do {
+    ioctl (fd, FIONREAD, &available_bytes);
+    usleep (100);
+  } while (available_bytes == 0);
+
+  //g_print ("available: %d bytes\n", available_bytes);
+
+  do {
+    n = read (fd, out, sz);
+    if (n < 0) {
+      break;
+    }
+    num += n;
+    usleep (1);
+  } while (num < available_bytes);
+
+  return num;
+}
+
 static gboolean
 canon_message_read (int fd, canon_message * reply)
 {
-  int n = 0, num = 0;
-  int available_bytes = 0;
-  do {
-    ioctl (fd, FIONREAD, &available_bytes);
-    usleep (1000);
-    //g_print ("available: %d bytes\n", available_bytes);
-  } while (available_bytes == 0);
-
-  g_print ("available: %d bytes\n", available_bytes);
-
+  int n = 0;
+  gboolean done = FALSE;
   canon_message_reset (reply);
 
   do {
-    num = read (fd, &reply->buffer[n], 1);
-    if (num < 0) {
-      g_print ("read: %d\n", num);
-      return FALSE;
-    }
-    if (reply->buffer[n] == CANON_TERMINATOR) {
+    n = sizeof (reply->buffer) - reply->len;
+    n = canon_message_read_some (fd, &reply->buffer[reply->len], n);
+    if (n <= 0) {
+      g_print ("read: %d\n", n);
       break;
     }
-    n += num;
-    usleep (1);
-  } while (n < sizeof (reply->buffer) - 1);
 
-  reply->len = n;
+    reply->len += n;
+    //canon_message_dump (reply, "read");
+
+    for (n = 0; n < reply->len; ++n) {
+      //g_print ("read: 0x%0x, %d\n", (int) reply->buffer[n] & 0xFF, n);
+      if ((reply->buffer[n] & 0xFF) == CANON_TERMINATOR) {
+        done = TRUE;
+        break;
+      }
+    }
+
+    usleep (10);
+  } while (!done);
 
   canon_message_dump (reply, "read");
   return TRUE;
@@ -239,14 +261,14 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
 
   g_free ((void *) canon->device);
   canon->device = g_strdup (dev);
-  canon->fd = open (dev, O_RDWR | O_NDELAY | O_NOCTTY);
+  canon->fd = open (dev, O_RDWR | O_NONBLOCK /*O_NDELAY */  | O_NOCTTY);
 
   if (canon->fd == -1) {
     g_print ("canon: open(%s) error: %s\n", dev, strerror (errno));
     return FALSE;
   }
 
-  fcntl (canon->fd, F_SETFL, 0);
+  fcntl (canon->fd, F_SETFL, O_RDWR | O_NONBLOCK);
   //tcgetattr (canon->fd, &canon->options);
 
   /**
@@ -258,18 +280,9 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
  Stop Bit : 1 bit or 2 bit (selected through menu window) 
  Handshake : RTS/CTS Control 
    */
-  /* control flags */
   canon->options.c_cflag = B9600 | CS8 | CLOCAL | CREAD;
-
-  /* local flags */
   canon->options.c_lflag = 0;
-
-  /* input flags */
-  //canon->options.c_iflag = ~(IGNBRK | BRKINT | PARMRK | ISTRIP
-  //    | INLCR | IGNCR | ICRNL | IXON);
   canon->options.c_iflag = IGNPAR;
-
-  /* output flags */
   canon->options.c_oflag = 0;
 
   //cfmakeraw (&canon->options);
@@ -292,75 +305,35 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   //cfsetospeed (&canon->options, B115200);
   //cfsetospeed (&canon->options, B230400);
 
+  canon->options.c_cc[VMIN] = 1;
+
   tcsetattr (canon->fd, TCSANOW, &canon->options);
 
-  //////////////////////////////////////////////////
-
 #if 0
-  //FF 30 30 00 86 30 EF
-  //FF 30 30 00 58 30 EF
-  //FF 30 30 00 91 33 30 30 30 31 30 32 EF
-  //FF 30 30 00 91 35 31 32 33 34 35 36 EF
-  //FF 30 30 00 86 30 EF
-
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x86);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0xEF);
-
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x58);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0xEF);
-
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x91);
-  canon_message_append (&msg, 0x33);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x32);
-  canon_message_append (&msg, 0xEF);
-
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x91);
-  canon_message_append (&msg, 0x35);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x32);
-  canon_message_append (&msg, 0x33);
-  canon_message_append (&msg, 0x34);
-  canon_message_append (&msg, 0x35);
-  canon_message_append (&msg, 0x36);
-  canon_message_append (&msg, 0xEF);
-
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x86);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0xEF);
+  tcgetattr (canon->fd, &canon->options);
+  g_print ("iflag: %d\n", canon->options.c_iflag);
+  g_print ("oflag: %d\n", canon->options.c_oflag);
+  g_print ("cflag: %d\n", canon->options.c_cflag);
+  g_print ("lflag: %d\n", canon->options.c_lflag);
+  g_print ("ispeed: %d\n", cfgetispeed (&canon->options));
+  g_print ("ospeed: %d\n", cfgetospeed (&canon->options));
+  g_print ("F_GETFL: %d, 0x%x\n", fcntl (canon->fd, F_GETFL), fcntl (canon->fd,
+          F_GETFL));
+  for (num = 0; num < NCCS; ++num) {
+    g_print ("cc[%d]=0x%02x, ", num, canon->options.c_cc[num]);
+  }
+  g_print ("\n");
 #endif
+
+  //////////////////////////////////////////////////
 
   // 0xff 0x30 0x30 0x00 0x8f 0x30 0xef
   // 0xff 0x30 0x30 0x00 0x8f 0x31 0xef
   // ff 30 31 00 87 ef
   // 0xff 0x30 0x31 0x00 0xa0 0x31 0xef
   // 
+
+  // "Probe device chain"
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0x30);
@@ -380,15 +353,31 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
+  // "Turn off command finish notification"
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x87);
+  canon_message_append (&msg, 0x94);
+  canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
+  // "Camera off"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0xA0);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  sleep (1);
+
+  // "Camera on"
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
@@ -398,6 +387,102 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // "Camera Reset"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0xAA);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // "Turn on command finish notification"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x94);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // "Get device info"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x87);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // "Center"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x58);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  ////////////////////////
+#if 0
+  // "Set pan speed"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x50);
+  canon_message_append (&msg, '1');
+  canon_message_append (&msg, '5');
+  canon_message_append (&msg, '0');
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // "Pan left"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x60);
+  canon_message_append (&msg, '2');
+  canon_message_append (&msg, '0');
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  sleep (1.0);
+
+  // "Pan left stop"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x53);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // "Pan right till can't any more"
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x60);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+#endif
+
   return TRUE;
 }
 
@@ -407,7 +492,7 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
-  guint uspeed = speed * 0x320;
+  guint uspeed = 0x8 + speed * 0x320;
   char buf[10] = { 0 };
 
   //008~320h
@@ -416,50 +501,52 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
   if (0x320 < uspeed)
     uspeed = 0x320;
 
-  g_print ("canon: pan(%f, %f)\n", speed, v);
+  sprintf (buf, "%3X", uspeed);
 
-  //sprintf (buf, "%3X", uspeed);
-  //g_print ("canon: pan: %s, %x\n", buf, uspeed);
+  g_print ("canon: pan(%f, %f) (%s)\n", speed, v, buf);
 
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x80);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0xEF);
-  if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
-    return FALSE;
+  if (v <= 0.001) {
+    canon_message_reset (&msg);
+    canon_message_append (&msg, 0xFF);
+    canon_message_append (&msg, 0x30);
+    canon_message_append (&msg, 0x31);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0x60);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0xEF);
+    canon_message_send_with_reply (canon->fd, &msg, &reply);
+    return TRUE;
   }
-  //FFh 30h 3Xh 00h 51h p0 p1 p2 EFh
+
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0x00);
   canon_message_append (&msg, 0x50);
   canon_message_append (&msg, buf[0]);
   canon_message_append (&msg, buf[1]);
   canon_message_append (&msg, buf[2]);
   canon_message_append (&msg, 0xEF);
-  if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
-    return FALSE;
-  }
-  //FFh 30h 3Xh 00h 53h 33h EFh
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x53);
+  canon_message_append (&msg, 0x60);
   if (v < 0) {
-    canon_message_append (&msg, 0x02);
+    canon_message_append (&msg, 0x31);
+    canon_message_append (&msg, 0x30);
   } else {
-    canon_message_append (&msg, 0x01);
+    canon_message_append (&msg, 0x32);
+    canon_message_append (&msg, 0x30);
   }
   canon_message_append (&msg, 0xEF);
-
-  return canon_message_send_with_reply (canon->fd, &msg, &reply);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  return TRUE;
 }
 
 static gboolean
@@ -468,52 +555,62 @@ gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
-  guint uspeed = speed * 0x320;
+  guint uspeed = 0x8 + speed * 0x26E;
   char buf[10] = { 0 };
 
-  //008~320h
+  //008~26Eh
   if (uspeed < 0x8)
     uspeed = 0x8;
-  if (0x320 < uspeed)
-    uspeed = 0x320;
-
-  g_print ("canon: tilt(%f, %f)\n", speed, v);
+  if (0x26E < uspeed)
+    uspeed = 0x26E;
 
   sprintf (buf, "%3X", uspeed);
-  g_print ("canon: tilt: %s, %x\n", buf, uspeed);
 
-  //FFh 30h 3Xh 00h 51h p0 p1 p2 EFh
+  g_print ("canon: tilt(%f, %f) (%s)\n", speed, v, buf);
+
+  if (v <= 0.001) {
+    canon_message_reset (&msg);
+    canon_message_append (&msg, 0xFF);
+    canon_message_append (&msg, 0x30);
+    canon_message_append (&msg, 0x31);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0x60);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0xEF);
+    canon_message_send_with_reply (canon->fd, &msg, &reply);
+    return TRUE;
+  }
+
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0x00);
   canon_message_append (&msg, 0x51);
   canon_message_append (&msg, buf[0]);
   canon_message_append (&msg, buf[1]);
   canon_message_append (&msg, buf[2]);
   canon_message_append (&msg, 0xEF);
-  if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
-    return FALSE;
-  }
-  //FFh 30h 3Xh 00h 53h 33h EFh
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x53);
+  canon_message_append (&msg, 0x60);
   if (v < 0) {
-    canon_message_append (&msg, 0x03);
+    canon_message_append (&msg, 0x30);
+    canon_message_append (&msg, 0x31);
   } else {
-    canon_message_append (&msg, 0x04);
+    canon_message_append (&msg, 0x30);
+    canon_message_append (&msg, 0x32);
   }
   canon_message_append (&msg, 0xEF);
-  if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
-    return FALSE;
-  }
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
 
-  return canon_message_send_with_reply (canon->fd, &msg, &reply);
+  return TRUE;
 }
 
 static gboolean
@@ -522,11 +619,82 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double speed,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
+  char buf1[10] = { 0 };
+  char buf2[10] = { 0 };
+  guint uspeed = 0;
 
-  g_print ("canon: move(%f, %f)\n", x, y);
+  //008~320h
+  uspeed = 0x8 + speed * 0x320;
+  if (uspeed < 0x8)
+    uspeed = 0x8;
+  if (0x320 < uspeed)
+    uspeed = 0x320;
+  sprintf (buf1, "%3X", uspeed);
 
-  // ...
-  return canon_message_send_with_reply (canon->fd, &msg, &reply);
+  //008~26Eh
+  uspeed = 0x8 + speed * 0x26E;
+  if (uspeed < 0x8)
+    uspeed = 0x8;
+  if (0x26E < uspeed)
+    uspeed = 0x26E;
+  sprintf (buf2, "%3X", uspeed);
+
+  g_print ("canon: move(%f, %f, %f) (%s, %s)\n", speed, x, y, buf1, buf2);
+
+  if (x <= 0.001) {
+    canon_message_reset (&msg);
+    canon_message_append (&msg, 0xFF);
+    canon_message_append (&msg, 0x30);
+    canon_message_append (&msg, 0x31);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0x60);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0x00);
+    canon_message_append (&msg, 0xEF);
+    canon_message_send_with_reply (canon->fd, &msg, &reply);
+    return TRUE;
+  }
+
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x50);
+  canon_message_append (&msg, buf1[0]);
+  canon_message_append (&msg, buf1[1]);
+  canon_message_append (&msg, buf1[2]);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x51);
+  canon_message_append (&msg, buf2[0]);
+  canon_message_append (&msg, buf2[1]);
+  canon_message_append (&msg, buf2[2]);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x60);
+  if (x < 0) {
+    canon_message_append (&msg, 0x31);
+    canon_message_append (&msg, 0x30);
+  } else {
+    canon_message_append (&msg, 0x32);
+    canon_message_append (&msg, 0x30);
+  }
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  return TRUE;
 }
 
 /**
@@ -540,45 +708,12 @@ static gboolean
 gst_cam_controller_canon_zoom (GstCamControllerCanon * canon, double speed,
     double z)
 {
-  canon_message msg = canon_message_init (0);
-  canon_message reply = canon_message_init (0);
+  //canon_message msg = canon_message_init (0);
+  //canon_message reply = canon_message_init (0);
 
   g_print ("canon: zoom(%f)\n", z);
 
-  canon_message_append (&msg, CANON_COMMAND);
-  canon_message_append (&msg, CANON_CATEGORY_CAMERA1);
-  canon_message_append (&msg, CANON_ZOOM);
-  if (z == 0) {
-    canon_message_append (&msg, CANON_ZOOM_STOP);
-  } else if (z < 0) {
-    canon_message_append (&msg,
-        CANON_ZOOM_TELE_SPEED | ((int) speed /*canon->zoom_speed */  & 0x07));
-    if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
-      return FALSE;
-    }
-
-    canon_message_reset (&msg);
-    canon_message_reset (&reply);
-    canon_message_append (&msg, CANON_COMMAND);
-    canon_message_append (&msg, CANON_CATEGORY_CAMERA1);
-    canon_message_append (&msg, CANON_ZOOM);
-    canon_message_append (&msg, CANON_ZOOM_TELE);
-  } else if (0 < z) {
-    canon_message_append (&msg,
-        CANON_ZOOM_WIDE_SPEED | ((int) speed /*canon->zoom_speed */  & 0x07));
-    if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
-      return FALSE;
-    }
-
-    canon_message_reset (&msg);
-    canon_message_reset (&reply);
-    canon_message_append (&msg, CANON_COMMAND);
-    canon_message_append (&msg, CANON_CATEGORY_CAMERA1);
-    canon_message_append (&msg, CANON_ZOOM);
-    canon_message_append (&msg, CANON_ZOOM_WIDE);
-  }
-
-  return canon_message_send_with_reply (canon->fd, &msg, &reply);
+  return TRUE;
 }
 
 static void
