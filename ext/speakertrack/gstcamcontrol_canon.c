@@ -118,14 +118,7 @@ canon_message_dump (const canon_message * msg, const gchar * tag)
 
   for (n = 0; n < msg->len; ++n) {
     int c = msg->buffer[n];
-    if (c == '\r')
-      g_print ("\\r");
-    /*
-       else if (isprint (c))
-       g_print ("%c", c);
-     */
-    else
-      g_print ("\\x%02X", (unsigned char) c);
+    g_print ("\\x%02X", (unsigned char) c);
   }
   g_print ("\n");
 }
@@ -155,30 +148,36 @@ canon_message_send (int fd, const canon_message * msg)
 }
 
 static gboolean
-canon_message_reply (int fd, canon_message * reply)
+canon_message_read (int fd, canon_message * reply)
 {
-  int n = 0;
+  int n = 0, num = 0;
   int available_bytes = 0;
-
   do {
     ioctl (fd, FIONREAD, &available_bytes);
-    usleep (500);
+    usleep (1000);
     //g_print ("available: %d bytes\n", available_bytes);
   } while (available_bytes == 0);
 
   g_print ("available: %d bytes\n", available_bytes);
 
+  canon_message_reset (reply);
+
   do {
-    if (read (fd, &reply->buffer[n], 1) != 1) {
+    num = read (fd, &reply->buffer[n], 1);
+    if (num < 0) {
+      g_print ("read: %d\n", num);
       return FALSE;
     }
     if (reply->buffer[n] == CANON_TERMINATOR) {
       break;
     }
-    n += 1;
+    n += num;
     usleep (1);
   } while (n < sizeof (reply->buffer) - 1);
 
+  reply->len = n;
+
+  canon_message_dump (reply, "read");
   return TRUE;
 }
 
@@ -189,7 +188,7 @@ canon_message_send_with_reply (int fd, const canon_message * msg,
   if (!canon_message_send (fd, msg)) {
     return FALSE;
   }
-  return canon_message_reply (fd, reply);
+  return canon_message_read (fd, reply);
 }
 
 static void
@@ -248,8 +247,7 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   }
 
   fcntl (canon->fd, F_SETFL, 0);
-  /* Setting port parameters */
-  tcgetattr (canon->fd, &canon->options);
+  //tcgetattr (canon->fd, &canon->options);
 
   /**
  RS-232C Conformity Connector & Pin assignment of connector are referred to 2.2 
@@ -261,45 +259,39 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
  Handshake : RTS/CTS Control 
    */
   /* control flags */
-  //cfsetispeed(&canon->options, B2400);
-  //cfsetispeed(&canon->options, B4800);
-  //cfsetispeed (&canon->options, B9600);
-  cfsetispeed (&canon->options, B19200);
-  //cfsetispeed(&canon->options, B38400);
-  //cfsetispeed(&canon->options, B57600);
-  //cfsetispeed(&canon->options, B115200);
-  //cfsetispeed(&canon->options, B230400);
-
-  //cfsetospeed (&canon->options, B9600);
-  cfsetospeed (&canon->options, B19200);
-  //cfsetospeed(&canon->options, B38400);
-  //cfsetospeed(&canon->options, B57600);
-  //cfsetospeed(&canon->options, B115200);
-  //cfsetospeed(&canon->options, B230400);
-  canon->options.c_cflag &= ~PARENB;    /* No parity  */
-  canon->options.c_cflag &= ~CSTOPB;    /*  one stop bit          */
-  //canon->options.c_cflag |= CSTOPB;     /*  two stop bits         */
-  canon->options.c_cflag &= ~CSIZE;     /* 8bit       */
-  canon->options.c_cflag |= CS8;        /*            */
-  //canon->options.c_cflag &= ~CRTSCTS;   /* No hdw ctl */
-  canon->options.c_cflag |= CRTSCTS;    /* Enable  RTS/CTS */
+  canon->options.c_cflag = B9600 | CS8 | CLOCAL | CREAD;
 
   /* local flags */
-  canon->options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);    /* raw input */
+  canon->options.c_lflag = 0;
 
   /* input flags */
-  //canon->options.c_iflag &= ~(INPCK | ISTRIP); // no parity
-  //canon->options.c_iflag &= ~(IXON | IXOFF | IXANY); // no soft ctl
-  canon->options.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP
-      | INLCR | IGNCR | ICRNL | IXON);
-
-  /* patch: bpflegin: set to 0 in order to avoid invalid pan/tilt return values */
-  //canon->options.c_iflag = 0;
+  //canon->options.c_iflag = ~(IGNBRK | BRKINT | PARMRK | ISTRIP
+  //    | INLCR | IGNCR | ICRNL | IXON);
+  canon->options.c_iflag = IGNPAR;
 
   /* output flags */
-  canon->options.c_oflag &= ~OPOST;     /* raw output */
+  canon->options.c_oflag = 0;
 
-  cfmakeraw (&canon->options);
+  //cfmakeraw (&canon->options);
+
+  //cfsetispeed (&canon->options, B2400);
+  //cfsetispeed (&canon->options, B4800);
+  cfsetispeed (&canon->options, B9600);
+  //cfsetispeed (&canon->options, B19200);
+  //cfsetispeed (&canon->options, B38400);
+  //cfsetispeed (&canon->options, B57600);
+  //cfsetispeed (&canon->options, B115200);
+  //cfsetispeed (&canon->options, B230400);
+
+  //cfsetospeed (&canon->options, B2400);
+  //cfsetospeed (&canon->options, B4800);
+  cfsetospeed (&canon->options, B9600);
+  //cfsetospeed (&canon->options, B19200);
+  //cfsetospeed (&canon->options, B38400);
+  //cfsetospeed (&canon->options, B57600);
+  //cfsetospeed (&canon->options, B115200);
+  //cfsetospeed (&canon->options, B230400);
+
   tcsetattr (canon->fd, TCSANOW, &canon->options);
 
   //////////////////////////////////////////////////
@@ -426,8 +418,8 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
 
   g_print ("canon: pan(%f, %f)\n", speed, v);
 
-  sprintf (buf, "%3X", uspeed);
-  g_print ("canon: pan: %s, %x\n", buf, uspeed);
+  //sprintf (buf, "%3X", uspeed);
+  //g_print ("canon: pan: %s, %x\n", buf, uspeed);
 
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
@@ -436,8 +428,11 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
   canon_message_append (&msg, 0x80);
   canon_message_append (&msg, 0x00);
   canon_message_append (&msg, 0xEF);
-
+  if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
+    return FALSE;
+  }
   //FFh 30h 3Xh 00h 51h p0 p1 p2 EFh
+  canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0x30);
@@ -447,8 +442,11 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
   canon_message_append (&msg, buf[1]);
   canon_message_append (&msg, buf[2]);
   canon_message_append (&msg, 0xEF);
-
+  if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
+    return FALSE;
+  }
   //FFh 30h 3Xh 00h 53h 33h EFh
+  canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0x30);
@@ -485,6 +483,7 @@ gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
   g_print ("canon: tilt: %s, %x\n", buf, uspeed);
 
   //FFh 30h 3Xh 00h 51h p0 p1 p2 EFh
+  canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0x30);
@@ -494,8 +493,11 @@ gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
   canon_message_append (&msg, buf[1]);
   canon_message_append (&msg, buf[2]);
   canon_message_append (&msg, 0xEF);
-
+  if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
+    return FALSE;
+  }
   //FFh 30h 3Xh 00h 53h 33h EFh
+  canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0x30);
@@ -507,6 +509,9 @@ gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
     canon_message_append (&msg, 0x04);
   }
   canon_message_append (&msg, 0xEF);
+  if (!canon_message_send_with_reply (canon->fd, &msg, &reply)) {
+    return FALSE;
+  }
 
   return canon_message_send_with_reply (canon->fd, &msg, &reply);
 }
