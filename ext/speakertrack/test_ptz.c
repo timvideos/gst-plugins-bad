@@ -37,17 +37,22 @@ run (GstCamController * ctrl, const char *name)
   usleep (3000000);
 
   // pan left
-  gst_cam_controller_pan (ctrl, 0.8, -1);
+  gst_cam_controller_pan (ctrl, 0.1, 0.25);
   usleep (3000000);
-  gst_cam_controller_pan (ctrl, 0.8, 0);
-  usleep (100000);
+
+  // pan center
+  gst_cam_controller_pan (ctrl, 0.9, 0.5);
+  usleep (3000000);
 
   // pan right
-  gst_cam_controller_pan (ctrl, 0.8, 1);
+  gst_cam_controller_pan (ctrl, 0.8, 1 - 0.25);
   usleep (3000000);
-  gst_cam_controller_pan (ctrl, 0.8, 0);
-  usleep (100000);
 
+  // pan center
+  gst_cam_controller_pan (ctrl, 0.0, 0.5);
+  usleep (3000000);
+
+#if 0
   // tilt up
   gst_cam_controller_tilt (ctrl, 0.8, -1);
   usleep (3000000);
@@ -59,6 +64,7 @@ run (GstCamController * ctrl, const char *name)
   usleep (3000000);
   gst_cam_controller_tilt (ctrl, 0.8, 0);
   usleep (100000);
+#endif
 
   gst_cam_controller_close (ctrl);
 }
@@ -83,7 +89,7 @@ main (int argc, char **argv)
     fprintf (stderr, "bad arguments\n");
     return -1;
   }
-#if GLIB_MAJOR_VERSION <= 2 && GLIB_MINOR_VERSION <= 3 && GLIB_MICRO_VERSION <= 2
+#if GLIB_MAJOR_VERSION <= 2 && GLIB_MINOR_VERSION <= 3 && GLIB_MICRO_VERSION <= 6
   g_type_init ();
 #endif
   return run_visca (argv[1]);
