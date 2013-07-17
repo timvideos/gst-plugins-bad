@@ -93,7 +93,7 @@ static gboolean
 gst_cam_controller_sony_pan (GstCamControllerSony * sony,
     double speed, double v)
 {
-  double d = ((double) v) / 100.0;
+  double d = v;                 // ((double) v) / 100.0;
   g_print ("pan: %f\n", d);
   sony_visca_pan (sony->sony, d);
   return TRUE;
