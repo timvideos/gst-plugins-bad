@@ -695,14 +695,59 @@ gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
  *  @return TRUE if commands sent.
  */
 static gboolean
-gst_cam_controller_canon_zoom (GstCamControllerCanon * canon, double speed,
-    double z)
+gst_cam_controller_canon_zoom (GstCamControllerCanon * canon, double vzspeed,
+    double vz)
 {
-  //canon_message msg = canon_message_init (0);
-  //canon_message reply = canon_message_init (0);
+  canon_message msg = canon_message_init (0);
+  canon_message reply = canon_message_init (0);
+  guint zspeed = (canon->zoom_speed = vzspeed) * 7;
+  guint z = (canon->zoom = vz) * 0x07A8;        // 0000~07A8h
+  char bufs[10] = { 0 };
+  char bufz[10] = { 0 };
 
-  g_print ("canon: zoom(%f)\n", z);
+  //0~7
+  if (zspeed < 0)
+    zspeed = 0;
+  if (7 < zspeed)
+    zspeed = 7;
 
+  //0~07A8h
+  if (z < 0)
+    z = 0;
+  if (0x07A8 < z)
+    z = 0x07A8;
+
+  sprintf (bufs, "%1X", zspeed);
+  sprintf (bufz, "%04X", z & 0xFFFF);
+
+  g_print
+      ("canon: zoom(%f, %f) -> (zoom=(0x%s, 0x%s))\n", vzspeed, vz, bufs, bufz);
+
+  // Zoom Speed Assignment
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0xB4);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, bufs[0]);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Angle Assignment
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0xB3);
+  canon_message_append (&msg, bufz[0]);
+  canon_message_append (&msg, bufz[1]);
+  canon_message_append (&msg, bufz[2]);
+  canon_message_append (&msg, bufz[3]);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
   return TRUE;
 }
 
