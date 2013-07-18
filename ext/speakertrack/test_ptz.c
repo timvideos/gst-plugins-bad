@@ -34,23 +34,23 @@ run (GstCamController * ctrl, const char *name)
   }
 #endif
 
-  usleep (3000000);
+  usleep (5000000);
 
   // pan left
-  gst_cam_controller_pan (ctrl, 0.1, 0.25);
-  usleep (3000000);
+  gst_cam_controller_pan (ctrl, 0.3, 0.25);
+  usleep (5000000);
 
   // pan center
   gst_cam_controller_pan (ctrl, 0.9, 0.5);
-  usleep (3000000);
+  usleep (5000000);
 
   // pan right
   gst_cam_controller_pan (ctrl, 0.8, 1 - 0.25);
-  usleep (3000000);
+  usleep (5000000);
 
   // pan center
-  gst_cam_controller_pan (ctrl, 0.0, 0.5);
-  usleep (3000000);
+  gst_cam_controller_pan (ctrl, 0.7, 0.5);
+  usleep (5000000);
 
 #if 0
   // tilt up

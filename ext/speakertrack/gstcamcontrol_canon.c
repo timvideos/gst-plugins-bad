@@ -217,9 +217,12 @@ static void
 gst_cam_controller_canon_init (GstCamControllerCanon * canon)
 {
   canon->fd = -1;
-  canon->zoom_speed = 100;
-  canon->pan_speed = 100;
-  canon->tilt_speed = 100;
+  canon->zoom = 0.5;
+  canon->zoom_speed = 1.0;
+  canon->pan = 0.5;
+  canon->pan_speed = 1.0;
+  canon->tilt = 0.5;
+  canon->tilt_speed = 1.0;
 
   bzero (&canon->options, sizeof (canon->options));
 }
@@ -487,21 +490,31 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
 }
 
 static gboolean
-gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
-    double v)
+gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
+    double vx, double vyspeed, double vy)
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
-  guint uspeed = 0x8 + speed * 0x320;
-  gint x = 0x7C87 + v * (0x8379 - 0x7C87);      // 7C87~8379h
-  char buf[10] = { 0 };
+  guint xspeed = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
+  guint yspeed = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
+  guint x = 0x7C87 + (canon->pan = vx) * (0x8379 - 0x7C87);     // 7C87~8379h
+  guint y = 0x7EF5 + (canon->tilt = vy) * (0x810B - 0x7EF5);    // 7eF5~810Bh
+  char bufsx[10] = { 0 };
+  char bufsy[10] = { 0 };
   char bufx[10] = { 0 };
+  char bufy[10] = { 0 };
 
   //008~320h
-  if (uspeed < 0x8)
-    uspeed = 0x8;
-  if (0x320 < uspeed)
-    uspeed = 0x320;
+  if (xspeed < 0x8)
+    xspeed = 0x8;
+  if (0x320 < xspeed)
+    xspeed = 0x320;
+
+  //008~26Eh
+  if (yspeed < 0x8)
+    yspeed = 0x8;
+  if (0x26E < yspeed)
+    yspeed = 0x26E;
 
   //7C87~8379h
   if (x < 0x7C87)
@@ -509,21 +522,44 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
   if (0x8379 < x)
     x = 0x8379;
 
-  sprintf (buf, "%03X", uspeed);
+  //7eF5~810B
+  if (y < 0x7EF5)
+    y = 0x7EF5;
+  if (0x810B < y)
+    y = 0x810B;
+
+  sprintf (bufsx, "%03X", xspeed);
+  sprintf (bufsy, "%03X", yspeed);
   sprintf (bufx, "%04X", x & 0xFFFF);
+  sprintf (bufy, "%04X", y & 0xFFFF);
 
-  g_print ("canon: pan(%f, %f) -> (0x%s, 0x%s)\n", speed, v, buf, bufx);
+  g_print
+      ("canon: move(%f, %f, %f, %f) -> (pan=(0x%s, 0x%s), tilt=(0x%s, 0x%s))\n",
+      vxspeed, vx, vyspeed, vy, bufsx, bufx, bufsy, bufy);
 
-  // Speed Assignment
+  // Pan Speed Assignment
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0x00);
   canon_message_append (&msg, 0x50);
-  canon_message_append (&msg, buf[0]);
-  canon_message_append (&msg, buf[1]);
-  canon_message_append (&msg, buf[2]);
+  canon_message_append (&msg, bufsx[0]);
+  canon_message_append (&msg, bufsx[1]);
+  canon_message_append (&msg, bufsx[2]);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Tilt Speed Assignment
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x51);
+  canon_message_append (&msg, bufsy[0]);
+  canon_message_append (&msg, bufsy[1]);
+  canon_message_append (&msg, bufsy[2]);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
@@ -538,14 +574,23 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
   canon_message_append (&msg, bufx[1]);
   canon_message_append (&msg, bufx[2]);
   canon_message_append (&msg, bufx[3]);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, bufy[0]);
+  canon_message_append (&msg, bufy[1]);
+  canon_message_append (&msg, bufy[2]);
+  canon_message_append (&msg, bufy[3]);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
+  return TRUE;
+}
 
-#if 1
+static gboolean
+gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
+    double v)
+{
+  return gst_cam_controller_canon_move (canon, speed, v, canon->tilt_speed,
+      canon->tilt);
+
+#if 0
   // Start Pan running
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
@@ -559,19 +604,36 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
     canon_message_append (&msg, 0x32);  // pan: 1, 2
   canon_message_append (&msg, 0x30);    // tilt: 1, 2
   canon_message_append (&msg, 0xEF);
-#endif
+//#else
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x53);
+  if (v < 0.5)
+    canon_message_append (&msg, 0x31);  // pan: 1, 2
+  else
+    canon_message_append (&msg, 0x32);  // pan: 1, 2
+  canon_message_append (&msg, 0xEF);
+
   canon_message_send_with_reply (canon->fd, &msg, &reply);
   return TRUE;
+#endif
 }
 
 static gboolean
 gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
     double v)
 {
+  return gst_cam_controller_canon_move (canon, canon->pan_speed, canon->pan,
+      speed, v);
+
+#if 0
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
   guint uspeed = 0x8 + speed * 0x26E;
-  gint y = v * 267;             // -267~+267
+  gint y = v * 267;             // 7eF5~810Bh
   char buf[10] = { 0 };
   char bufy[10] = { 0 };
 
@@ -580,6 +642,12 @@ gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
     uspeed = 0x8;
   if (0x26E < uspeed)
     uspeed = 0x26E;
+
+  //7eF5~810B
+  if (y < 0x7EF5)
+    y = 0x7EF5;
+  if (0x810B < y)
+    y = 0x810B;
 
   sprintf (buf, "%3X", uspeed);
   sprintf (bufy, "%4X", y & 0xFFFF);
@@ -616,72 +684,7 @@ gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
   return TRUE;
-}
-
-static gboolean
-gst_cam_controller_canon_move (GstCamControllerCanon * canon, double speed,
-    double vx, double vy)
-{
-  canon_message msg = canon_message_init (0);
-  canon_message reply = canon_message_init (0);
-  gint x = vx * 889;            // -889~+889
-  gint y = vy * 267;            // -267~+267
-  char buf1[10] = { 0 };
-  char buf2[10] = { 0 };
-  char bufx[10] = { 0 };
-  char bufy[10] = { 0 };
-  guint uspeed = 0;
-
-  //008~320h
-  uspeed = 0x8 + speed * 0x320;
-  if (uspeed < 0x8)
-    uspeed = 0x8;
-  if (0x320 < uspeed)
-    uspeed = 0x320;
-  sprintf (buf1, "%3X", uspeed);
-
-  //008~26Eh
-  uspeed = 0x8 + speed * 0x26E;
-  if (uspeed < 0x8)
-    uspeed = 0x8;
-  if (0x26E < uspeed)
-    uspeed = 0x26E;
-  sprintf (buf2, "%3X", uspeed);
-
-  sprintf (bufx, "%4X", x & 0xFFFF);
-  sprintf (bufy, "%4X", y & 0xFFFF);
-
-  g_print ("canon: move(%f, %f, %f) (%s, %s)\n", speed, vx, vy, buf1, buf2);
-
-  canon_message_reset (&msg);
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x50);
-  canon_message_append (&msg, buf1[0]);
-  canon_message_append (&msg, buf1[1]);
-  canon_message_append (&msg, buf1[2]);
-  canon_message_append (&msg, 0xEF);
-  canon_message_send_with_reply (canon->fd, &msg, &reply);
-
-  canon_message_reset (&msg);
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x62);
-  canon_message_append (&msg, bufx[0]);
-  canon_message_append (&msg, bufx[1]);
-  canon_message_append (&msg, bufx[2]);
-  canon_message_append (&msg, bufx[3]);
-  canon_message_append (&msg, bufy[0]);
-  canon_message_append (&msg, bufy[1]);
-  canon_message_append (&msg, bufy[2]);
-  canon_message_append (&msg, bufy[3]);
-  canon_message_append (&msg, 0xEF);
-  canon_message_send_with_reply (canon->fd, &msg, &reply);
-  return TRUE;
+#endif
 }
 
 /**

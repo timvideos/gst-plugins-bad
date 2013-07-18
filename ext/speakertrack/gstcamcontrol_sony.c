@@ -111,7 +111,7 @@ gst_cam_controller_sony_tilt (GstCamControllerSony * sony,
 
 static gboolean
 gst_cam_controller_sony_move (GstCamControllerSony * sony,
-    double speed, double x, double y)
+    double xspeed, double x, double yspeed, double y)
 {
   double dx = x;                //((double) x) / 100.0;
   double dy = 1.0 - y;          //((double) y) / 100.0;
