@@ -384,8 +384,8 @@ gst_cam_controller_pana_tilt (GstCamControllerPana * pana, double speed,
 }
 
 static gboolean
-gst_cam_controller_pana_move (GstCamControllerPana * pana, double speed,
-    double x, double y)
+gst_cam_controller_pana_move (GstCamControllerPana * pana, double xspeed,
+    double x, double yspeed, double y)
 {
   pana_message msg = { {0}, 0 };
   char buf[32];
@@ -445,7 +445,8 @@ gst_cam_controller_pana_move (GstCamControllerPana * pana, double speed,
   if (iy < 0x80)
     iy = 0x80;
 
-  g_print ("pana: move(%f, %f, %f) (%04x, %04x)\n", speed, x, y, ix, iy);
+  g_print ("pana: move(%f, %f, %f, %f) (%04x, %04x)\n", xspeed, x, yspeed, y,
+      ix, iy);
 
   sprintf (buf, "%04X%04X", ix, iy);
   pana_message_reset (&msg);

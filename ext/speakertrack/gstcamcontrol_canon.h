@@ -43,9 +43,9 @@ typedef struct _GstCamControllerCanon
   const char *device;
   struct termios options;
   gint fd;
-  guint zoom_speed;
-  guint pan_speed;
-  guint tilt_speed;
+  double zoom, zoom_speed;
+  double pan, pan_speed;
+  double tilt, tilt_speed;
 } GstCamControllerCanon;
 
 typedef struct _GstCamControllerCanonClass
