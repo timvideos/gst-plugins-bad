@@ -78,7 +78,7 @@ run (GstCamController * ctrl, const char *name)
 }
 
 static int
-run_visca (const char *name)
+run_canon (const char *name)
 {
   GstCamControllerCanon *visca =
       GST_CAM_CONTROLLER_CANON (g_object_new (GST_TYPE_CAM_CONTROLLER_CANON,
@@ -100,5 +100,5 @@ main (int argc, char **argv)
 #if GLIB_MAJOR_VERSION <= 2 && GLIB_MINOR_VERSION <= 3 && GLIB_MICRO_VERSION <= 6
   g_type_init ();
 #endif
-  return run_visca (argv[1]);
+  return run_canon (argv[1]);
 }
