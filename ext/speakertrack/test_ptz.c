@@ -65,13 +65,13 @@ run (GstCamController * ctrl, const char *name)
   usleep (5000000);
 
   // move
-  gst_cam_controller_move (ctrl, 50, -120, 50, -120);
+  gst_cam_controller_move (ctrl, 20, ctrl->pan_min, 50, ctrl->tilt_min);
   usleep (5000000);
-  gst_cam_controller_move (ctrl, 90, 0, 90, 0);
+  gst_cam_controller_move (ctrl, 100, 0, 100, 0);
   usleep (5000000);
-  gst_cam_controller_move (ctrl, 50, 120, 50, 120);
+  gst_cam_controller_move (ctrl, 20, ctrl->pan_max, 20, ctrl->tilt_max);
   usleep (5000000);
-  gst_cam_controller_move (ctrl, 90, 0, 90, 0);
+  gst_cam_controller_move (ctrl, 100, 0, 100, 0);
   usleep (5000000);
 
   gst_cam_controller_close (ctrl);

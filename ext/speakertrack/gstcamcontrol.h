@@ -59,19 +59,21 @@ G_BEGIN_DECLS
 typedef struct _GstCamController
 {
   GObject base;
+  double pan_min, pan_max;
+  double tilt_min, tilt_max;
 } GstCamController;
 
 typedef struct _GstCamControllerClass
 {
   GObjectClass base_class;
 
-    gboolean (*open) (GstCamController *, const char *dev);
-    void (*close) (GstCamController *);
+  gboolean (*open) (GstCamController *, const char *dev);
+  void (*close) (GstCamController *);
 
-    gboolean (*pan) (GstCamController *, double speed, double v);
-    gboolean (*tilt) (GstCamController *, double speed, double v);
-    gboolean (*move) (GstCamController *, double xspeed, double x, double yspeed, double y);
-    gboolean (*zoom) (GstCamController *, double speed, double v);
+  gboolean (*pan) (GstCamController *, double speed, double v);
+  gboolean (*tilt) (GstCamController *, double speed, double v);
+  gboolean (*move) (GstCamController *, double xspeed, double x, double yspeed, double y);
+  gboolean (*zoom) (GstCamController *, double speed, double v);
 } GstCamControllerClass;
 
 typedef gboolean (*GstCamControllerOpenFunc) (GstCamController *,
