@@ -219,10 +219,10 @@ gst_cam_controller_canon_init (GstCamControllerCanon * canon)
   canon->fd = -1;
   canon->zoom = 0.5;
   canon->zoom_speed = 1.0;
-  canon->pan = 0.5;
-  canon->pan_speed = 1.0;
-  canon->tilt = 0.5;
-  canon->tilt_speed = 1.0;
+  canon->pan = 0;               //0.5;
+  canon->pan_speed = 50;        //1.0;
+  canon->tilt = 0;              //0.5;
+  canon->tilt_speed = 50;       //1.0;
 
   bzero (&canon->options, sizeof (canon->options));
 }
@@ -422,6 +422,32 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
+  // Pan Speed Assignment
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x50);
+  canon_message_append (&msg, 0x33);
+  canon_message_append (&msg, 0x32);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Tilt Speed Assignment
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x51);
+  canon_message_append (&msg, 0x33);
+  canon_message_append (&msg, 0x32);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
   // "Center"
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
@@ -442,8 +468,8 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0x00);
   canon_message_append (&msg, 0x50);
-  canon_message_append (&msg, '1');
-  canon_message_append (&msg, '5');
+  canon_message_append (&msg, '3');
+  canon_message_append (&msg, '0');
   canon_message_append (&msg, '0');
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
@@ -495,14 +521,20 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
-  guint xspeed = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
-  guint yspeed = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
-  guint x = 0x7C87 + (canon->pan = vx) * (0x8379 - 0x7C87);     // 7C87~8379h
-  guint y = 0x7EF5 + (canon->tilt = vy) * (0x810B - 0x7EF5);    // 7eF5~810Bh
+  const double dps = 0.1125;    // 0.1125 degrees/second
+  guint xspeed;                 // = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
+  guint yspeed;                 // = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
+  guint x;                      // = 0x7C87 + (canon->pan = vx) * (0x8379 - 0x7C87);     // 7C87~8379h
+  guint y;                      // = 0x7EF5 + (canon->tilt = vy) * (0x810B - 0x7EF5);    // 7eF5~810Bh
   char bufsx[10] = { 0 };
   char bufsy[10] = { 0 };
   char bufx[10] = { 0 };
   char bufy[10] = { 0 };
+
+  xspeed = 0x8 + (canon->pan_speed = vxspeed) / dps;
+  yspeed = 0x8 + (canon->tilt_speed = vyspeed) / dps;
+  x = 0x7C87 + (((canon->pan = vx) + 120) / 240.0) * (0x8379 - 0x7C87);
+  y = 0x7EF5 + (((canon->tilt = vy) + 120) / 240.0) * (0x810B - 0x7EF5);
 
   //008~320h
   if (xspeed < 0x8)
@@ -560,6 +592,18 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   canon_message_append (&msg, bufsy[0]);
   canon_message_append (&msg, bufsy[1]);
   canon_message_append (&msg, bufsy[2]);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Stop Pan/Tilt
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x60);
+  canon_message_append (&msg, 0x30);    // pan: 0, 1, 2
+  canon_message_append (&msg, 0x30);    // tilt: 0, 1, 2
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 

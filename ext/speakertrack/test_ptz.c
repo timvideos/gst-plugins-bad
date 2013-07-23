@@ -36,35 +36,43 @@ run (GstCamController * ctrl, const char *name)
 
   usleep (5000000);
 
-  // pan left
-  gst_cam_controller_pan (ctrl, 0.3, 0.25);
+  // pan left (degrees per seconds, degrees)
+  gst_cam_controller_pan (ctrl, /*0.3, 0.25 */ 50, -30);
   usleep (5000000);
 
   // pan center
-  gst_cam_controller_pan (ctrl, 0.9, 0.5);
+  gst_cam_controller_pan (ctrl, /*0.9, 0.5 */ 90, 0);
   usleep (5000000);
 
   // pan right
-  gst_cam_controller_pan (ctrl, 0.8, 1 - 0.25);
+  gst_cam_controller_pan (ctrl, /*0.8, 1 - 0.25 */ 50, 30);
   usleep (5000000);
 
   // pan center
-  gst_cam_controller_pan (ctrl, 0.7, 0.5);
+  gst_cam_controller_pan (ctrl, /*0.7, 0.5 */ 90, 0);
   usleep (5000000);
 
-#if 0
   // tilt up
-  gst_cam_controller_tilt (ctrl, 0.8, -1);
-  usleep (3000000);
-  gst_cam_controller_tilt (ctrl, 0.8, 0);
-  usleep (100000);
+  gst_cam_controller_tilt (ctrl, /*0.8, 0.25 */ 50, 45);
+  usleep (5000000);
+  gst_cam_controller_tilt (ctrl, /*0.8, 0.5 */ 90, 0);
+  usleep (5000000);
 
   // tilt down
-  gst_cam_controller_tilt (ctrl, 0.8, 1);
-  usleep (3000000);
-  gst_cam_controller_tilt (ctrl, 0.8, 0);
-  usleep (100000);
-#endif
+  gst_cam_controller_tilt (ctrl, /*0.8, 1-0.25 */ 50, -45);
+  usleep (5000000);
+  gst_cam_controller_tilt (ctrl, /*0.8, 0.5 */ 90, 0);
+  usleep (5000000);
+
+  // move
+  gst_cam_controller_move (ctrl, 50, -120, 50, -120);
+  usleep (5000000);
+  gst_cam_controller_move (ctrl, 90, 0, 90, 0);
+  usleep (5000000);
+  gst_cam_controller_move (ctrl, 50, 120, 50, 120);
+  usleep (5000000);
+  gst_cam_controller_move (ctrl, 90, 0, 90, 0);
+  usleep (5000000);
 
   gst_cam_controller_close (ctrl);
 }
