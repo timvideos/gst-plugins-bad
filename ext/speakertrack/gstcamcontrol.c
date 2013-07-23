@@ -196,8 +196,9 @@ gst_cam_controller_move (GstCamController * controller, double sx, double x,
 {
   GstCamControllerClass *ccc =
       GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
-  if (ccc->move)
+  if (ccc->move) {
     return ccc->move (controller, sx, x, sy, y);
+  }
   return FALSE;
 }
 
@@ -348,7 +349,15 @@ gst_cam_control_face_track (GstCamcontrol * camctl, const GstStructure * s)
   z = 0.0;
 
   if (camctl->controller) {
-    gst_cam_controller_move (camctl->controller, 1.0, x, 1.0, y);
+    /**
+     *  Map from [0, 1] to [-120, 120]
+     */
+    double s = 120;
+    x = (x - 0.5) * 120.0;
+    y = (y - 0.5) * 120.0;
+    //z = (z - 0.5) * 120.0;
+
+    gst_cam_controller_move (camctl->controller, s, x, s, y);
     gst_cam_controller_zoom (camctl->controller, 1.0, z);
   } else {
     g_print ("camctl: (%f, %f) (%d, %d)\n", x, y, vw, vh);
