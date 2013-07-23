@@ -221,8 +221,12 @@ gst_cam_controller_canon_init (GstCamControllerCanon * canon)
   canon->zoom_speed = 1.0;
   canon->pan = 0;               //0.5;
   canon->pan_speed = 50;        //1.0;
+  canon->base.pan_min = -175;
+  canon->base.pan_max = 175;
   canon->tilt = 0;              //0.5;
   canon->tilt_speed = 50;       //1.0;
+  canon->base.tilt_min = -55;   //-20;
+  canon->base.tilt_max = 90;    //90;
 
   bzero (&canon->options, sizeof (canon->options));
 }
@@ -521,6 +525,10 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
+  const double panmax = 0x8379;
+  const double panmin = 0x7C87;
+  const double tiltmax = 0x810B;
+  const double tiltmin = 0x7EF5;
   const double dps = 0.1125;    // 0.1125 degrees/second
   guint xspeed;                 // = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
   guint yspeed;                 // = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
@@ -530,11 +538,25 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   char bufsy[10] = { 0 };
   char bufx[10] = { 0 };
   char bufy[10] = { 0 };
+  double lx = panmax - panmin;
+  double ly = tiltmax - tiltmin;
+  double px = lx / (canon->base.pan_max - canon->base.pan_min);
+  double py = ly / (canon->base.tilt_max - canon->base.tilt_min);
 
+  canon->pan = vx;
+  canon->tilt = vy;
+  if (canon->pan < canon->base.pan_min)
+    canon->pan = canon->base.pan_min;
+  if (canon->base.pan_max < canon->pan)
+    canon->pan = canon->base.pan_max;
+  if (canon->tilt < canon->base.tilt_min)
+    canon->tilt = canon->base.tilt_min;
+  if (canon->base.tilt_max < canon->tilt)
+    canon->tilt = canon->base.tilt_max;
   xspeed = 0x8 + (canon->pan_speed = vxspeed) / dps;
   yspeed = 0x8 + (canon->tilt_speed = vyspeed) / dps;
-  x = 0x7C87 + (((canon->pan = vx) + 120) / 240.0) * (0x8379 - 0x7C87);
-  y = 0x7EF5 + (((canon->tilt = vy) + 120) / 240.0) * (0x810B - 0x7EF5);
+  x = panmin + lx * 0.5 + canon->pan * px + 0.5;
+  y = tiltmin + ly * 0.5 + canon->tilt * py + 0.5;
 
   //008~320h
   if (xspeed < 0x8)
@@ -596,16 +618,18 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
   // Stop Pan/Tilt
-  canon_message_reset (&msg);
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x60);
-  canon_message_append (&msg, 0x30);    // pan: 0, 1, 2
-  canon_message_append (&msg, 0x30);    // tilt: 0, 1, 2
-  canon_message_append (&msg, 0xEF);
-  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  /*
+     canon_message_reset (&msg);
+     canon_message_append (&msg, 0xFF);
+     canon_message_append (&msg, 0x30);
+     canon_message_append (&msg, 0x31);
+     canon_message_append (&msg, 0x00);
+     canon_message_append (&msg, 0x60);
+     canon_message_append (&msg, 0x30);    // pan: 0, 1, 2
+     canon_message_append (&msg, 0x30);    // tilt: 0, 1, 2
+     canon_message_append (&msg, 0xEF);
+     canon_message_send_with_reply (canon->fd, &msg, &reply);
+   */
 
   // Angle Assignment
   canon_message_reset (&msg);
