@@ -19,6 +19,7 @@ run (GstCamController * ctrl, const char *name)
 {
   if (!gst_cam_controller_open (ctrl, name)) {
     fprintf (stderr, "can't open: %s\n", name);
+    fprintf (stderr, "try: %s /dev/ttyUSB0 \n", argv[0]);
     return;
   }
   //gst_cam_controller_move (ctrl, 0.8, x, y);
@@ -94,7 +95,7 @@ int
 main (int argc, char **argv)
 {
   if (argc < 2) {
-    fprintf (stderr, "bad arguments\n");
+    fprintf (stderr, "try: %s /dev/ttyUSB0 \n", argv[0]);
     return -1;
   }
 #if GLIB_MAJOR_VERSION <= 2 && GLIB_MINOR_VERSION <= 3 && GLIB_MICRO_VERSION <= 6
