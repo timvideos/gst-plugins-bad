@@ -19,7 +19,7 @@ run (GstCamController * ctrl, const char *name)
 {
   if (!gst_cam_controller_open (ctrl, name)) {
     fprintf (stderr, "can't open: %s\n", name);
-    fprintf (stderr, "try: %s /dev/ttyUSB0 \n", argv[0]);
+    fprintf (stderr, "try: ./ptz /dev/ttyUSB0 \n");
     return;
   }
   //gst_cam_controller_move (ctrl, 0.8, x, y);
