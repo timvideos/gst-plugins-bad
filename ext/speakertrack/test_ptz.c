@@ -98,7 +98,7 @@ main (int argc, char **argv)
     fprintf (stderr, "try: %s /dev/ttyUSB0 \n", argv[0]);
     return -1;
   }
-#if GLIB_MAJOR_VERSION <= 2 && GLIB_MINOR_VERSION <= 3 && GLIB_MICRO_VERSION <= 6
+#if GLIB_MAJOR_VERSION < 2 || (GLIB_MAJOR_VERSION == 2 && GLIB_MINOR_VERSION < 3) || (GLIB_MAJOR_VERSION == 2 && GLIB_MINOR_VERSION == 3 && GLIB_MICRO_VERSION <= 6)
   g_type_init ();
 #endif
   return run_canon (argv[1]);
