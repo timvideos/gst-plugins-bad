@@ -125,6 +125,7 @@ G_DEFINE_TYPE (GstCamController, gst_cam_controller, G_TYPE_OBJECT);
 static void
 gst_cam_controller_init (GstCamController * controller)
 {
+  controller->device_info = NULL;
 }
 
 static void

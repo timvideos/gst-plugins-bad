@@ -54,8 +54,8 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <stdio.h>
-#include <string.h>
 #include <ctype.h>
+#include <glib/gstring.h>
 
 G_DEFINE_TYPE (GstCamControllerCanon, gst_cam_controller_canon,
     GST_TYPE_CAM_CONTROLLER);
@@ -85,6 +85,20 @@ G_DEFINE_TYPE (GstCamControllerCanon, gst_cam_controller_canon,
 
 //#define canon_message_init(a) { {0}, 0, (a) }
 #define canon_message_init(a) { {0}, 0 }
+
+struct range_t
+{
+  const gchar *name;
+  double pan_min, pan_max;
+  double tilt_min, tilt_max;
+  guint u_pan_min, u_pan_max;
+  guint u_tilt_min, u_tilt_max;
+  guint u_zoom_min, u_zoom_max;
+};
+static struct range_t range_table[] = {
+  {"C50i", -175, 175, -55, 90, 0x7C87, 0x8379, 0x7EF5, 0x810B, 0, 0x07A8},
+  {NULL, 0, 0, 0, 0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+};
 
 typedef struct _canon_message
 {
@@ -221,12 +235,13 @@ gst_cam_controller_canon_init (GstCamControllerCanon * canon)
   canon->zoom_speed = 1.0;
   canon->pan = 0;               //0.5;
   canon->pan_speed = 50;        //1.0;
-  canon->base.pan_min = -175;
-  canon->base.pan_max = 175;
   canon->tilt = 0;              //0.5;
   canon->tilt_speed = 50;       //1.0;
+  canon->base.pan_min = -175;
+  canon->base.pan_max = 175;
   canon->base.tilt_min = -55;   //-20;
   canon->base.tilt_max = 90;    //90;
+  canon->base.device_info = NULL;
 
   bzero (&canon->options, sizeof (canon->options));
 }
@@ -236,6 +251,7 @@ gst_cam_controller_canon_finalize (GstCamControllerCanon * canon)
 {
   G_OBJECT_CLASS (gst_cam_controller_canon_parent_class)
       ->finalize (G_OBJECT (canon));
+  g_free (canon->base.device_info);
 }
 
 static void
@@ -405,14 +421,14 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
-  // "Turn on command finish notification"
+  // "Turn on/off command finish notification"
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0x00);
   canon_message_append (&msg, 0x94);
-  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
@@ -425,7 +441,44 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0x87);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
+  if (5 < reply.len) {
+    int n = 0;
+    reply.buffer[reply.len - 2] = 0;
+    canon->base.device_info = &reply.buffer[5];
+    canon->base.device_info = g_strdup (canon->base.device_info);
+    g_print ("device: %s\n", canon->base.device_info);
+    for (n = 0;; ++n) {
+      const struct range_t *range = &range_table[n];
+      if (range->name == NULL)
+        break;
+      if (g_str_has_prefix (canon->base.device_info, range->name)
+          /*|| g_str_has_prefix (range->name, canon->base.device_info) */
+          ) {
+        g_print ("device: found range: %s\n", range->name);
+        canon->base.pan_min = range->pan_min;
+        canon->base.pan_max = range->pan_max;
+        canon->base.tilt_min = range->tilt_min;
+        canon->base.tilt_max = range->tilt_max;
+        canon->range = range;
+        break;
+      }
+    }
+  }
 
+  if (canon->range == NULL) {
+    int n;
+    for (n = 0;; ++n) {
+      const struct range_t *range = &range_table[n];
+      if (range->name == NULL) {
+        canon->base.pan_min = range->pan_min;
+        canon->base.pan_max = range->pan_max;
+        canon->base.tilt_min = range->tilt_min;
+        canon->base.tilt_max = range->tilt_max;
+        canon->range = range;
+        break;
+      }
+    }
+  }
   // Pan Speed Assignment
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
@@ -460,6 +513,50 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0x00);
   canon_message_append (&msg, 0x58);
   canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Pan Min
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x5C);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Pan Max
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x5C);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Tilt Min
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x5C);
+  canon_message_append (&msg, 0x32);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Tilt Max
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x5C);
+  canon_message_append (&msg, 0x33);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
@@ -525,10 +622,12 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
-  const double panmax = 0x8379;
-  const double panmin = 0x7C87;
-  const double tiltmax = 0x810B;
-  const double tiltmin = 0x7EF5;
+  /*
+     const double panmax = 0x8379;
+     const double panmin = 0x7C87;
+     const double tiltmax = 0x810B;
+     const double tiltmin = 0x7EF5;
+   */
   const double dps = 0.1125;    // 0.1125 degrees/second
   guint xspeed;                 // = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
   guint yspeed;                 // = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
@@ -538,8 +637,8 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   char bufsy[10] = { 0 };
   char bufx[10] = { 0 };
   char bufy[10] = { 0 };
-  double lx = panmax - panmin;
-  double ly = tiltmax - tiltmin;
+  double lx = canon->range->u_pan_max - canon->range->u_pan_min;
+  double ly = canon->range->u_tilt_max - canon->range->u_tilt_min;
   double px = lx / (canon->base.pan_max - canon->base.pan_min);
   double py = ly / (canon->base.tilt_max - canon->base.tilt_min);
 
@@ -555,8 +654,8 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
     canon->tilt = canon->base.tilt_max;
   xspeed = 0x8 + (canon->pan_speed = vxspeed) / dps;
   yspeed = 0x8 + (canon->tilt_speed = vyspeed) / dps;
-  x = panmin + lx * 0.5 + canon->pan * px + 0.5;
-  y = tiltmin + ly * 0.5 + canon->tilt * py + 0.5;
+  x = canon->range->u_pan_min + lx * 0.5 + canon->pan * px + 0.5;
+  y = canon->range->u_tilt_min + ly * 0.5 + canon->tilt * py + 0.5;
 
   //008~320h
   if (xspeed < 0x8)
@@ -769,7 +868,7 @@ gst_cam_controller_canon_zoom (GstCamControllerCanon * canon, double vzspeed,
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
   guint zspeed = (canon->zoom_speed = vzspeed) * 7;
-  guint z = (canon->zoom = vz) * 0x07A8;        // 0000~07A8h
+  guint z = canon->range->u_zoom_min + (canon->zoom = vz) * canon->range->u_zoom_max;   // 0000~07A8h
   char bufs[10] = { 0 };
   char bufz[10] = { 0 };
 

@@ -61,6 +61,7 @@ typedef struct _GstCamController
   GObject base;
   double pan_min, pan_max;
   double tilt_min, tilt_max;
+  gchar *device_info;
 } GstCamController;
 
 typedef struct _GstCamControllerClass
