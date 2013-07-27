@@ -46,6 +46,7 @@ typedef struct _GstCamControllerCanon
   double zoom, zoom_speed;
   double pan, pan_speed;
   double tilt, tilt_speed;
+  const struct range_t *range;
 } GstCamControllerCanon;
 
 typedef struct _GstCamControllerCanonClass
