@@ -94,10 +94,15 @@ struct range_t
   guint u_pan_min, u_pan_max;
   guint u_tilt_min, u_tilt_max;
   guint u_zoom_min, u_zoom_max;
+  guint u_pan_speed_min, u_pan_speed_max;
+  guint u_tilt_speed_min, u_tilt_speed_max;
+  guint u_zoom_speed_min, u_zoom_speed_max;
 };
-static struct range_t range_table[] = {
-  {"C50i", -175, 175, -55, 90, 0x7C87, 0x8379, 0x7EF5, 0x810B, 0, 0x07A8},
-  {NULL, 0, 0, 0, 0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+static const struct range_t range_table[] = {
+  {"C50i", -175, 175, -55, 90, 0x7C87, 0x8379, 0x7EF5, 0x810B, 0, 0x07A8, 0x8,
+      0x320, 0x8, 0x26E, 0, 7},
+  {NULL, 0, 0, 0, 0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+      0x0},
 };
 
 typedef struct _canon_message
@@ -252,6 +257,7 @@ gst_cam_controller_canon_finalize (GstCamControllerCanon * canon)
   G_OBJECT_CLASS (gst_cam_controller_canon_parent_class)
       ->finalize (G_OBJECT (canon));
   g_free (canon->base.device_info);
+  g_free (canon->range);
 }
 
 static void
@@ -275,6 +281,9 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
+  const char *valueFmt = "\xFE\x30\x31\x30\x30%4X\xEF";
+  const char *valueFmt2 = "\xFE\x30\x31\x30\x30%3X\xEF";
+  guint m, scanMin = 0, scanMax = 0;
 
   g_print ("canon: open(%s)\n", dev);
 
@@ -455,11 +464,8 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
           /*|| g_str_has_prefix (range->name, canon->base.device_info) */
           ) {
         g_print ("device: found range: %s\n", range->name);
-        canon->base.pan_min = range->pan_min;
-        canon->base.pan_max = range->pan_max;
-        canon->base.tilt_min = range->tilt_min;
-        canon->base.tilt_max = range->tilt_max;
-        canon->range = range;
+        canon->range = g_new0 (struct range_t, 1);
+        *canon->range = *range;
         break;
       }
     }
@@ -470,11 +476,8 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
     for (n = 0;; ++n) {
       const struct range_t *range = &range_table[n];
       if (range->name == NULL) {
-        canon->base.pan_min = range->pan_min;
-        canon->base.pan_max = range->pan_max;
-        canon->base.tilt_min = range->tilt_min;
-        canon->base.tilt_max = range->tilt_max;
-        canon->range = range;
+        canon->range = g_new0 (struct range_t, 1);
+        *canon->range = *range;
         break;
       }
     }
@@ -526,7 +529,10 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0x30);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
-
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt, &scanMin) == 1) {
+    g_print ("Pan-Min: %d (%04x)\n", scanMin, scanMin);
+  }
   // Pan Max
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
@@ -537,7 +543,20 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0x31);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt, &scanMax) == 1) {
+    g_print ("Pan-Max: %d (%04x)\n", scanMax, scanMax);
+  }
 
+  if (scanMin != 0 && scanMax != 0) {
+    canon->range->u_pan_min = scanMin;
+    canon->range->u_pan_max = scanMax;
+    m = scanMin + (scanMax - scanMin) / 2;
+    canon->range->pan_min = -(double) (m - scanMin) * 0.1125;
+    canon->range->pan_max = (double) (scanMax - m) * 0.1125;
+    g_print ("range: [%f, %f]\n", canon->range->pan_min, canon->range->pan_max);
+    scanMin = scanMax = 0;
+  }
   // Tilt Min
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
@@ -548,7 +567,10 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0x32);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
-
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt, &scanMin) == 1) {
+    g_print ("Tilt-Min: %d (%04x)\n", scanMin, scanMin);
+  }
   // Tilt Max
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
@@ -559,6 +581,121 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_append (&msg, 0x33);
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt, &scanMax) == 1) {
+    g_print ("Tilt-Max: %d (%04x)\n", scanMax, scanMax);
+  }
+
+  if (scanMin != 0 && scanMax != 0) {
+    canon->range->u_tilt_min = scanMin;
+    canon->range->u_tilt_max = scanMax;
+    m = scanMin + (scanMax - scanMin) / 2;
+    canon->range->tilt_min = -(double) (m - scanMin) * 0.1125;
+    canon->range->tilt_max = (double) (scanMax - m) * 0.1125;
+    g_print ("range: [%f, %f]\n", canon->range->tilt_min,
+        canon->range->tilt_max);
+    scanMin = scanMax = 0;
+  }
+  // Zoom Max
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0xB4);
+  canon_message_append (&msg, 0x33);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt, &scanMax) == 1) {
+    g_print ("Zoom-Max: %d (%04x)\n", scanMax, scanMax);
+  }
+
+  if (scanMax != 0) {
+    canon->range->u_zoom_max = scanMax;
+    scanMin = scanMax = 0;
+  }
+  // Pan Speed Min
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x59);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt2, &scanMin) == 1) {
+    g_print ("Pan-Speed-Min: %d (%03x)\n", scanMin, scanMin);
+  }
+  // Pan Speed Max
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x59);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt2, &scanMax) == 1) {
+    g_print ("Pan-Speed-Max: %d (%03x)\n", scanMax, scanMax);
+  }
+
+  if (scanMin != 0 && scanMax != 0) {
+    canon->range->u_pan_speed_min = scanMin;
+    canon->range->u_pan_speed_max = scanMax;
+    g_print ("pan-speed-range: [%d, %d]\n", canon->range->u_pan_speed_min,
+        canon->range->u_pan_speed_max);
+    scanMin = scanMax = 0;
+  }
+  // Tilt Speed Min
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x59);
+  canon_message_append (&msg, 0x32);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt2, &scanMin) == 1) {
+    g_print ("Tilt-Speed-Min: %d (%03x)\n", scanMin, scanMin);
+  }
+  // Tilt Speed Max
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x59);
+  canon_message_append (&msg, 0x33);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt2, &scanMax) == 1) {
+    g_print ("Tilt-Speed-Max: %d (%03x)\n", scanMax, scanMax);
+  }
+
+  if (scanMin != 0 && scanMax != 0) {
+    canon->range->u_tilt_speed_min = scanMin;
+    canon->range->u_tilt_speed_max = scanMax;
+    g_print ("tilt-speed-range: [%d, %d]\n", canon->range->u_pan_speed_min,
+        canon->range->u_pan_speed_max);
+    scanMin = scanMax = 0;
+  }
+
+  canon->base.pan_min = canon->range->pan_min;
+  canon->base.pan_speed_min = canon->range->u_pan_speed_min;
+  canon->base.pan_max = canon->range->pan_max;
+  canon->base.pan_speed_max = canon->range->u_pan_speed_max;
+  canon->base.tilt_min = canon->range->tilt_min;
+  canon->base.tilt_speed_min = canon->range->u_tilt_speed_min;
+  canon->base.tilt_max = canon->range->tilt_max;
+  canon->base.tilt_speed_max = canon->range->u_tilt_speed_max;
 
   ////////////////////////
 #if 0
@@ -622,12 +759,6 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
-  /*
-     const double panmax = 0x8379;
-     const double panmin = 0x7C87;
-     const double tiltmax = 0x810B;
-     const double tiltmin = 0x7EF5;
-   */
   const double dps = 0.1125;    // 0.1125 degrees/second
   guint xspeed;                 // = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
   guint yspeed;                 // = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
@@ -658,28 +789,28 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   y = canon->range->u_tilt_min + ly * 0.5 + canon->tilt * py + 0.5;
 
   //008~320h
-  if (xspeed < 0x8)
-    xspeed = 0x8;
-  if (0x320 < xspeed)
-    xspeed = 0x320;
+  if (xspeed < canon->range->u_pan_speed_min /*0x8 */ )
+    xspeed = canon->range->u_pan_speed_min /*0x8 */ ;
+  if (canon->range->u_pan_speed_max /*0x320 */  < xspeed)
+    xspeed = canon->range->u_pan_speed_max /*0x320 */ ;
 
   //008~26Eh
-  if (yspeed < 0x8)
-    yspeed = 0x8;
-  if (0x26E < yspeed)
-    yspeed = 0x26E;
+  if (yspeed < canon->range->u_tilt_speed_min /*0x8 */ )
+    yspeed = canon->range->u_tilt_speed_min /*0x8 */ ;
+  if (canon->range->u_tilt_speed_max /*0x26E */  < yspeed)
+    yspeed = canon->range->u_tilt_speed_max /*0x26E */ ;
 
   //7C87~8379h
-  if (x < 0x7C87)
-    x = 0x7C87;
-  if (0x8379 < x)
-    x = 0x8379;
+  if (x < canon->range->u_pan_min /*0x7C87 */ )
+    x = canon->range->u_pan_min /*0x7C87 */ ;
+  if (canon->range->u_pan_max /*0x8379 */  < x)
+    x = canon->range->u_pan_max /*0x8379 */ ;
 
   //7eF5~810B
-  if (y < 0x7EF5)
-    y = 0x7EF5;
-  if (0x810B < y)
-    y = 0x810B;
+  if (y < canon->range->u_tilt_min /*0x7EF5 */ )
+    y = canon->range->u_tilt_min /*0x7EF5 */ ;
+  if (canon->range->u_tilt_max /*0x810B */  < y)
+    y = canon->range->u_tilt_max /*0x810B */ ;
 
   sprintf (bufsx, "%03X", xspeed);
   sprintf (bufsy, "%03X", yspeed);
@@ -756,37 +887,6 @@ gst_cam_controller_canon_pan (GstCamControllerCanon * canon, double speed,
 {
   return gst_cam_controller_canon_move (canon, speed, v, canon->tilt_speed,
       canon->tilt);
-
-#if 0
-  // Start Pan running
-  canon_message_reset (&msg);
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x60);
-  if (v < 0.5)
-    canon_message_append (&msg, 0x31);  // pan: 1, 2
-  else
-    canon_message_append (&msg, 0x32);  // pan: 1, 2
-  canon_message_append (&msg, 0x30);    // tilt: 1, 2
-  canon_message_append (&msg, 0xEF);
-//#else
-  canon_message_reset (&msg);
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x53);
-  if (v < 0.5)
-    canon_message_append (&msg, 0x31);  // pan: 1, 2
-  else
-    canon_message_append (&msg, 0x32);  // pan: 1, 2
-  canon_message_append (&msg, 0xEF);
-
-  canon_message_send_with_reply (canon->fd, &msg, &reply);
-  return TRUE;
-#endif
 }
 
 static gboolean
@@ -795,63 +895,6 @@ gst_cam_controller_canon_tilt (GstCamControllerCanon * canon, double speed,
 {
   return gst_cam_controller_canon_move (canon, canon->pan_speed, canon->pan,
       speed, v);
-
-#if 0
-  canon_message msg = canon_message_init (0);
-  canon_message reply = canon_message_init (0);
-  guint uspeed = 0x8 + speed * 0x26E;
-  gint y = v * 267;             // 7eF5~810Bh
-  char buf[10] = { 0 };
-  char bufy[10] = { 0 };
-
-  //008~26Eh
-  if (uspeed < 0x8)
-    uspeed = 0x8;
-  if (0x26E < uspeed)
-    uspeed = 0x26E;
-
-  //7eF5~810B
-  if (y < 0x7EF5)
-    y = 0x7EF5;
-  if (0x810B < y)
-    y = 0x810B;
-
-  sprintf (buf, "%3X", uspeed);
-  sprintf (bufy, "%4X", y & 0xFFFF);
-
-  g_print ("canon: tilt(%f, %f) (%s)\n", speed, v, buf);
-
-  canon_message_reset (&msg);
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x51);
-  canon_message_append (&msg, buf[0]);
-  canon_message_append (&msg, buf[1]);
-  canon_message_append (&msg, buf[2]);
-  canon_message_append (&msg, 0xEF);
-  canon_message_send_with_reply (canon->fd, &msg, &reply);
-
-  canon_message_reset (&msg);
-  canon_message_append (&msg, 0xFF);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x31);
-  canon_message_append (&msg, 0x00);
-  canon_message_append (&msg, 0x62);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, 0x30);
-  canon_message_append (&msg, bufy[0]);
-  canon_message_append (&msg, bufy[1]);
-  canon_message_append (&msg, bufy[2]);
-  canon_message_append (&msg, bufy[3]);
-  canon_message_append (&msg, 0xEF);
-  canon_message_send_with_reply (canon->fd, &msg, &reply);
-
-  return TRUE;
-#endif
 }
 
 /**
@@ -881,8 +924,8 @@ gst_cam_controller_canon_zoom (GstCamControllerCanon * canon, double vzspeed,
   //0~07A8h
   if (z < 0)
     z = 0;
-  if (0x07A8 < z)
-    z = 0x07A8;
+  if (canon->range->u_zoom_max /*0x07A8 */  < z)
+    z = canon->range->u_zoom_max /*0x07A8 */ ;
 
   sprintf (bufs, "%1X", zspeed);
   sprintf (bufz, "%04X", z & 0xFFFF);

@@ -59,8 +59,8 @@ G_BEGIN_DECLS
 typedef struct _GstCamController
 {
   GObject base;
-  double pan_min, pan_max;
-  double tilt_min, tilt_max;
+  double pan_min, pan_max, pan_speed_min, pan_speed_max;
+  double tilt_min, tilt_max, tilt_speed_min, tilt_speed_max;
   gchar *device_info;
 } GstCamController;
 
