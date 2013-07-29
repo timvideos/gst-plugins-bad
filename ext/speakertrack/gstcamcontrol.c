@@ -204,6 +204,18 @@ gst_cam_controller_move (GstCamController * controller, double sx, double x,
 }
 
 /*static*/ gboolean
+gst_cam_controller_run (GstCamController * controller, double xspeed,
+    double yspeed, int dir, gboolean start)
+{
+  GstCamControllerClass *ccc =
+      GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
+  if (ccc->run) {
+    return ccc->run (controller, xspeed, yspeed, dir, start);
+  }
+  return FALSE;
+}
+
+/*static*/ gboolean
 gst_cam_controller_zoom (GstCamController * controller, double x, double y)
 {
   GstCamControllerClass *ccc =

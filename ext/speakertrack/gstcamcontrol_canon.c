@@ -754,6 +754,113 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
 }
 
 static gboolean
+gst_cam_controller_canon_run (GstCamControllerCanon * canon,
+    double vxspeed, double vyspeed, int dir, gboolean start)
+{
+  canon_message msg = canon_message_init (0);
+  canon_message reply = canon_message_init (0);
+  const double dps = 0.1125;    // 0.1125 degrees/second
+  guint xspeed;                 // = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
+  guint yspeed;                 // = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
+  char bufsx[10] = { 0 };
+  char bufsy[10] = { 0 };
+  char buf[10] = { 0 };
+
+  xspeed = 0x8 + (canon->pan_speed = vxspeed) / dps;
+  yspeed = 0x8 + (canon->tilt_speed = vyspeed) / dps;
+
+  //008~320h
+  if (xspeed < canon->range->u_pan_speed_min /*0x8 */ )
+    xspeed = canon->range->u_pan_speed_min /*0x8 */ ;
+  if (canon->range->u_pan_speed_max /*0x320 */  < xspeed)
+    xspeed = canon->range->u_pan_speed_max /*0x320 */ ;
+
+  //008~26Eh
+  if (yspeed < canon->range->u_tilt_speed_min /*0x8 */ )
+    yspeed = canon->range->u_tilt_speed_min /*0x8 */ ;
+  if (canon->range->u_tilt_speed_max /*0x26E */  < yspeed)
+    yspeed = canon->range->u_tilt_speed_max /*0x26E */ ;
+
+  sprintf (bufsx, "%03X", xspeed);
+  sprintf (bufsy, "%03X", yspeed);
+
+  switch (dir) {
+    case CAM_RUN_NONE:
+      buf[0] = buf[1] = '0';
+      break;
+    case CAM_RUN_LEFT:
+      buf[0] = start ? '2' : '0', buf[1] = '0';
+      break;
+    case CAM_RUN_LEFT_TOP:
+      buf[0] = start ? '2' : '0', buf[1] = start ? '1' : '0';
+      break;
+    case CAM_RUN_LEFT_BOTTOM:
+      buf[0] = start ? '2' : '0', buf[1] = start ? '2' : '0';
+      break;
+    case CAM_RUN_RIGHT:
+      buf[0] = start ? '1' : '0', buf[1] = '0';
+      break;
+    case CAM_RUN_RIGHT_TOP:
+      buf[0] = start ? '1' : '0', buf[1] = start ? '1' : '0';
+      break;
+    case CAM_RUN_RIGHT_BOTTOM:
+      buf[0] = start ? '1' : '0', buf[1] = start ? '2' : '0';
+      break;
+    case CAM_RUN_TOP:
+      buf[0] = '0', buf[1] = start ? '1' : '0';
+      break;
+    case CAM_RUN_BOTTOM:
+      buf[0] = '0', buf[1] = start ? '2' : '0';
+      break;
+  }
+
+  buf[3] = 0;
+  g_print
+      ("canon: run(%f, %f, %d, %d) -- %s\n", vxspeed, vyspeed, dir, start, buf);
+
+  // Pan Speed Assignment
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x50);
+  canon_message_append (&msg, bufsx[0]);
+  canon_message_append (&msg, bufsx[1]);
+  canon_message_append (&msg, bufsx[2]);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Tilt Speed Assignment
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x51);
+  canon_message_append (&msg, bufsy[0]);
+  canon_message_append (&msg, bufsy[1]);
+  canon_message_append (&msg, bufsy[2]);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Stop Pan/Tilt
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x60);
+  canon_message_append (&msg, buf[0]);  // pan: 0, 1, 2
+  canon_message_append (&msg, buf[1]);  // tilt: 0, 1, 2
+  //canon_message_append (&msg, 0x53);
+  //canon_message_append (&msg, 0x30);    // pan/tilt: 0/1
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+  return TRUE;
+}
+
+static gboolean
 gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
     double vx, double vyspeed, double vy)
 {
@@ -974,5 +1081,6 @@ gst_cam_controller_canon_class_init (GstCamControllerCanonClass * canonclass)
   camctl_class->pan = (GstCamControllerPanFunc) gst_cam_controller_canon_pan;
   camctl_class->tilt = (GstCamControllerTiltFunc) gst_cam_controller_canon_tilt;
   camctl_class->move = (GstCamControllerMoveFunc) gst_cam_controller_canon_move;
+  camctl_class->run = (GstCamControllerRunFunc) gst_cam_controller_canon_run;
   camctl_class->zoom = (GstCamControllerZoomFunc) gst_cam_controller_canon_zoom;
 }

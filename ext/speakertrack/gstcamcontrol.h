@@ -56,6 +56,18 @@ G_BEGIN_DECLS
 #define GST_IS_CAM_CONTROLLER(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), GST_TYPE_CAM_CONTROLLER))
 #define GST_IS_CAM_CONTROLLER_CLASS(class) (G_TYPE_CHECK_CLASS_TYPE ((class), GST_TYPE_CAM_CONTROLLER))
 
+enum {
+    CAM_RUN_NONE,
+    CAM_RUN_LEFT,
+    CAM_RUN_LEFT_TOP,
+    CAM_RUN_LEFT_BOTTOM,
+    CAM_RUN_RIGHT,
+    CAM_RUN_RIGHT_TOP,
+    CAM_RUN_RIGHT_BOTTOM,
+    CAM_RUN_TOP,
+    CAM_RUN_BOTTOM,
+};
+
 typedef struct _GstCamController
 {
   GObject base;
@@ -74,6 +86,7 @@ typedef struct _GstCamControllerClass
   gboolean (*pan) (GstCamController *, double speed, double v);
   gboolean (*tilt) (GstCamController *, double speed, double v);
   gboolean (*move) (GstCamController *, double xspeed, double x, double yspeed, double y);
+  gboolean (*run) (GstCamController *, double xspeed, double yspeed, int dir, gboolean start);
   gboolean (*zoom) (GstCamController *, double speed, double v);
 } GstCamControllerClass;
 
@@ -86,6 +99,8 @@ typedef gboolean (*GstCamControllerTiltFunc) (GstCamController *, double x,
     double y);
 typedef gboolean (*GstCamControllerMoveFunc) (GstCamController *, double xspeed,
     double y, double yspeed, double z);
+typedef gboolean (*GstCamControllerRunFunc) (GstCamController *,
+    double xspeed, double yspeed, int dir, gboolean start);
 typedef gboolean (*GstCamControllerZoomFunc) (GstCamController *, double x,
     double y);
 
@@ -97,6 +112,7 @@ void gst_cam_controller_close (GstCamController * controller);
 gboolean gst_cam_controller_pan (GstCamController * controller, double speed, double v);
 gboolean gst_cam_controller_tilt (GstCamController * controller, double speed, double v);
 gboolean gst_cam_controller_move (GstCamController * controller, double xspeed, double x, double yspeed, double y);
+gboolean gst_cam_controller_run (GstCamController * controller, double xspeed, double yspeed, int dir, gboolean start);
 gboolean gst_cam_controller_zoom (GstCamController * controller, double speed, double v);
 
 #define GST_TYPE_CAM_CONTROL \
