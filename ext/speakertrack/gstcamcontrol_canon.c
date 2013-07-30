@@ -689,13 +689,13 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   }
 
   canon->base.pan_min = canon->range->pan_min;
-  canon->base.pan_speed_min = canon->range->u_pan_speed_min;
+  canon->base.pan_speed_min = 1;        //canon->range->u_pan_speed_min;
   canon->base.pan_max = canon->range->pan_max;
-  canon->base.pan_speed_max = canon->range->u_pan_speed_max;
+  canon->base.pan_speed_max = 100;      //canon->range->u_pan_speed_max;
   canon->base.tilt_min = canon->range->tilt_min;
-  canon->base.tilt_speed_min = canon->range->u_tilt_speed_min;
+  canon->base.tilt_speed_min = 1;       //canon->range->u_tilt_speed_min;
   canon->base.tilt_max = canon->range->tilt_max;
-  canon->base.tilt_speed_max = canon->range->u_tilt_speed_max;
+  canon->base.tilt_speed_max = 100;     //canon->range->u_tilt_speed_max;
 
   ////////////////////////
 #if 0
@@ -917,7 +917,9 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   double px = lx / (canon->base.pan_max - canon->base.pan_min);
   double py = ly / (canon->base.tilt_max - canon->base.tilt_min);
 
+  canon->pan_speed = vxspeed;
   canon->pan = vx;
+  canon->tilt_speed = vyspeed;
   canon->tilt = vy;
   if (canon->pan < canon->base.pan_min)
     canon->pan = canon->base.pan_min;
@@ -927,8 +929,24 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
     canon->tilt = canon->base.tilt_min;
   if (canon->base.tilt_max < canon->tilt)
     canon->tilt = canon->base.tilt_max;
-  xspeed = 0x8 + (canon->pan_speed = vxspeed) / dps;
-  yspeed = 0x8 + (canon->tilt_speed = vyspeed) / dps;
+
+  if (canon->pan_speed < canon->base.pan_speed_min)
+    canon->pan_speed = canon->base.pan_speed_min;
+  if (canon->base.pan_speed_max < canon->pan_speed)
+    canon->pan_speed = canon->base.pan_speed_max;
+  if (canon->tilt_speed < canon->base.tilt_speed_min)
+    canon->tilt_speed = canon->base.tilt_speed_min;
+  if (canon->base.tilt_speed_max < canon->tilt_speed)
+    canon->tilt_speed = canon->base.tilt_speed_max;
+
+  xspeed = (canon->base.pan_speed_max - canon->base.pan_speed_min) /
+      (double) (canon->range->u_pan_speed_max - canon->range->u_pan_speed_min);
+  yspeed = (canon->base.tilt_speed_max - canon->base.tilt_speed_min) /
+      (double) (canon->range->u_tilt_speed_max -
+      canon->range->u_tilt_speed_min);
+
+  xspeed = 0x8 + canon->pan_speed / (dps * xspeed);
+  yspeed = 0x8 + canon->tilt_speed / (dps * yspeed);
   x = canon->range->u_pan_min + lx * 0.5 + canon->pan * px + 0.5;
   y = canon->range->u_tilt_min + ly * 0.5 + canon->tilt * py + 0.5;
 
