@@ -216,6 +216,18 @@ gst_cam_controller_run (GstCamController * controller, double xspeed,
 }
 
 /*static*/ gboolean
+gst_cam_controller_query (GstCamController * controller,
+    double *pan, double *tilt)
+{
+  GstCamControllerClass *ccc =
+      GST_CAM_CONTROLLER_CLASS (G_OBJECT_GET_CLASS (controller));
+  if (ccc->query) {
+    return ccc->query (controller, pan, tilt);
+  }
+  return FALSE;
+}
+
+/*static*/ gboolean
 gst_cam_controller_zoom (GstCamController * controller, double x, double y)
 {
   GstCamControllerClass *ccc =

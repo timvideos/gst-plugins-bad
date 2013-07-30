@@ -754,6 +754,43 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
 }
 
 static gboolean
+gst_cam_controller_canon_query (GstCamControllerCanon * canon,
+    double *pan, double *tilt)
+{
+  canon_message msg = canon_message_init (0);
+  canon_message reply = canon_message_init (0);
+  const char *valueFmt = "\xFE\x30\x31\x30\x30%4X%4X\xEF";
+  double ox = 0, oy = 0;
+  guint x = 0, y = 0;
+
+  // Pan Speed Assignment
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x63);
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  reply.buffer[reply.len] = 0;
+  if (sscanf (reply.buffer, valueFmt, &x, &y) == 2) {
+    double lx = canon->range->u_pan_max - canon->range->u_pan_min;
+    double ly = canon->range->u_tilt_max - canon->range->u_tilt_min;
+    double px = lx / (canon->base.pan_max - canon->base.pan_min);
+    double py = ly / (canon->base.tilt_max - canon->base.tilt_min);
+    //ox = canon->range->u_pan_min + lx * 0.5 + canon->pan * px + 0.5;
+    //oy = canon->range->u_tilt_min + ly * 0.5 + canon->tilt * py + 0.5;
+    ox = (double) (x - canon->range->u_pan_min - lx * 0.5) / px;
+    oy = (double) (y - canon->range->u_tilt_min - ly * 0.5) / py;
+    g_print ("canon: query(%d, %d) (%x, %x) -> (%f, %f)\n", x, y, x, y, ox, oy);
+    *pan = ox, *tilt = oy;
+  }
+
+  return TRUE;
+}
+
+static gboolean
 gst_cam_controller_canon_run (GstCamControllerCanon * canon,
     double vxspeed, double vyspeed, int dir, gboolean start)
 {
@@ -1082,5 +1119,7 @@ gst_cam_controller_canon_class_init (GstCamControllerCanonClass * canonclass)
   camctl_class->tilt = (GstCamControllerTiltFunc) gst_cam_controller_canon_tilt;
   camctl_class->move = (GstCamControllerMoveFunc) gst_cam_controller_canon_move;
   camctl_class->run = (GstCamControllerRunFunc) gst_cam_controller_canon_run;
+  camctl_class->query =
+      (GstCamControllerQueryFunc) gst_cam_controller_canon_query;
   camctl_class->zoom = (GstCamControllerZoomFunc) gst_cam_controller_canon_zoom;
 }
