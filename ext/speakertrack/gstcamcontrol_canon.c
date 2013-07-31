@@ -86,6 +86,8 @@ G_DEFINE_TYPE (GstCamControllerCanon, gst_cam_controller_canon,
 //#define canon_message_init(a) { {0}, 0, (a) }
 #define canon_message_init(a) { {0}, 0 }
 
+const double dps = 0.1125;      // 0.1125 degrees/second
+
 struct range_t
 {
   const gchar *name;
@@ -99,7 +101,7 @@ struct range_t
   guint u_zoom_speed_min, u_zoom_speed_max;
 };
 static const struct range_t range_table[] = {
-  {"C50i", -175, 175, -55, 90, 0x7C87, 0x8379, 0x7EF5, 0x810B, 0, 0x07A8, 0x8,
+  {"C50i", -100, 100, -59, 60, 0x7C87, 0x8379, 0x7EF5, 0x810B, 0, 0x07A8, 0x8,
       0x320, 0x8, 0x26E, 0, 7},
   {NULL, 0, 0, 0, 0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
       0x0},
@@ -689,13 +691,13 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   }
 
   canon->base.pan_min = canon->range->pan_min;
-  canon->base.pan_speed_min = 1;        //canon->range->u_pan_speed_min;
   canon->base.pan_max = canon->range->pan_max;
-  canon->base.pan_speed_max = 100;      //canon->range->u_pan_speed_max;
+  canon->base.pan_speed_min = (double) canon->range->u_pan_speed_min * dps;
+  canon->base.pan_speed_max = (double) canon->range->u_pan_speed_max * dps;
   canon->base.tilt_min = canon->range->tilt_min;
-  canon->base.tilt_speed_min = 1;       //canon->range->u_tilt_speed_min;
   canon->base.tilt_max = canon->range->tilt_max;
-  canon->base.tilt_speed_max = 100;     //canon->range->u_tilt_speed_max;
+  canon->base.tilt_speed_min = (double) canon->range->u_tilt_speed_min * dps;
+  canon->base.tilt_speed_max = (double) canon->range->u_tilt_speed_max * dps;
 
   ////////////////////////
 #if 0
@@ -796,15 +798,30 @@ gst_cam_controller_canon_run (GstCamControllerCanon * canon,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
-  const double dps = 0.1125;    // 0.1125 degrees/second
   guint xspeed;                 // = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
   guint yspeed;                 // = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
   char bufsx[10] = { 0 };
   char bufsy[10] = { 0 };
   char buf[10] = { 0 };
+  double sx, sy;
 
-  xspeed = 0x8 + (canon->pan_speed = vxspeed) / dps;
-  yspeed = 0x8 + (canon->tilt_speed = vyspeed) / dps;
+  canon->pan_speed = vxspeed;
+  canon->tilt_speed = vyspeed;
+  if (canon->pan_speed < canon->base.pan_speed_min)
+    canon->pan_speed = canon->base.pan_speed_min;
+  if (canon->base.pan_speed_max < canon->pan_speed)
+    canon->pan_speed = canon->base.pan_speed_max;
+  if (canon->tilt_speed < canon->base.tilt_speed_min)
+    canon->tilt_speed = canon->base.tilt_speed_min;
+  if (canon->base.tilt_speed_max < canon->tilt_speed)
+    canon->tilt_speed = canon->base.tilt_speed_max;
+
+  sx = (canon->range->u_pan_speed_max - canon->range->u_pan_speed_min)
+      / (canon->base.pan_speed_max - canon->base.pan_speed_min);
+  sy = (canon->range->u_tilt_speed_max - canon->range->u_tilt_speed_min)
+      / (canon->base.tilt_speed_max - canon->base.tilt_speed_min);
+  xspeed = canon->range->u_pan_speed_min + canon->pan_speed * sx;
+  yspeed = canon->range->u_tilt_speed_min + canon->tilt_speed * sy;
 
   //008~320h
   if (xspeed < canon->range->u_pan_speed_min /*0x8 */ )
@@ -903,7 +920,6 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
 {
   canon_message msg = canon_message_init (0);
   canon_message reply = canon_message_init (0);
-  const double dps = 0.1125;    // 0.1125 degrees/second
   guint xspeed;                 // = 0x8 + (canon->pan_speed = vxspeed) * 0x320;
   guint yspeed;                 // = 0x8 + (canon->tilt_speed = vyspeed) * 0x26E;
   guint x;                      // = 0x7C87 + (canon->pan = vx) * (0x8379 - 0x7C87);     // 7C87~8379h
@@ -916,6 +932,7 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   double ly = canon->range->u_tilt_max - canon->range->u_tilt_min;
   double px = lx / (canon->base.pan_max - canon->base.pan_min);
   double py = ly / (canon->base.tilt_max - canon->base.tilt_min);
+  double sx, sy;
 
   canon->pan_speed = vxspeed;
   canon->pan = vx;
@@ -939,14 +956,12 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   if (canon->base.tilt_speed_max < canon->tilt_speed)
     canon->tilt_speed = canon->base.tilt_speed_max;
 
-  xspeed = (canon->base.pan_speed_max - canon->base.pan_speed_min) /
-      (double) (canon->range->u_pan_speed_max - canon->range->u_pan_speed_min);
-  yspeed = (canon->base.tilt_speed_max - canon->base.tilt_speed_min) /
-      (double) (canon->range->u_tilt_speed_max -
-      canon->range->u_tilt_speed_min);
-
-  xspeed = 0x8 + canon->pan_speed / (dps * xspeed);
-  yspeed = 0x8 + canon->tilt_speed / (dps * yspeed);
+  sx = (canon->range->u_pan_speed_max - canon->range->u_pan_speed_min)
+      / (canon->base.pan_speed_max - canon->base.pan_speed_min);
+  sy = (canon->range->u_tilt_speed_max - canon->range->u_tilt_speed_min)
+      / (canon->base.tilt_speed_max - canon->base.tilt_speed_min);
+  xspeed = canon->range->u_pan_speed_min + canon->pan_speed * sx;
+  yspeed = canon->range->u_tilt_speed_min + canon->tilt_speed * sy;
   x = canon->range->u_pan_min + lx * 0.5 + canon->pan * px + 0.5;
   y = canon->range->u_tilt_min + ly * 0.5 + canon->tilt * py + 0.5;
 
