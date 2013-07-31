@@ -55,7 +55,8 @@
 #include <sys/ioctl.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <glib/gstring.h>
+//#include <glib/gstring.h>
+#include <glib.h>
 
 G_DEFINE_TYPE (GstCamControllerCanon, gst_cam_controller_canon,
     GST_TYPE_CAM_CONTROLLER);
