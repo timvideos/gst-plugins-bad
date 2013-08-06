@@ -903,7 +903,19 @@ gst_cam_controller_canon_run (GstCamControllerCanon * canon,
   canon_message_append (&msg, 0xEF);
   canon_message_send_with_reply (canon->fd, &msg, &reply);
 
-  // Stop Pan/Tilt
+  // Stop
+  canon_message_reset (&msg);
+  canon_message_append (&msg, 0xFF);
+  canon_message_append (&msg, 0x30);
+  canon_message_append (&msg, 0x31);
+  canon_message_append (&msg, 0x00);
+  canon_message_append (&msg, 0x60);
+  canon_message_append (&msg, 0x30);    // pan: 0, 1, 2
+  canon_message_append (&msg, 0x30);    // tilt: 0, 1, 2
+  canon_message_append (&msg, 0xEF);
+  canon_message_send_with_reply (canon->fd, &msg, &reply);
+
+  // Start Pan/Tilt
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
   canon_message_append (&msg, 0x30);
