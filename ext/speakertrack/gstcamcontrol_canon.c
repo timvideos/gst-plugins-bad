@@ -586,6 +586,10 @@ gst_cam_controller_canon_open (GstCamControllerCanon * canon, const char *dev)
   canon_message_send_with_reply (canon->fd, &msg, &reply);
   reply.buffer[reply.len] = 0;
   if (sscanf (reply.buffer, valueFmt, &scanMax) == 1) {
+    if (g_str_has_prefix (canon->base.device_info, "C50i")) {
+      //scanMax = 0x810B;
+      scanMax = canon->range->u_tilt_max;
+    }
     g_print ("Tilt-Max: %d (%04x)\n", scanMax, scanMax);
   }
 
