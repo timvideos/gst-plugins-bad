@@ -770,6 +770,9 @@ gst_cam_controller_canon_query (GstCamControllerCanon * canon,
   double ox = 0, oy = 0;
   guint x = 0, y = 0;
 
+  if (canon->range == NULL) {
+    return FALSE;
+  }
   // Pan Speed Assignment
   canon_message_reset (&msg);
   canon_message_append (&msg, 0xFF);
@@ -809,6 +812,10 @@ gst_cam_controller_canon_run (GstCamControllerCanon * canon,
   char bufsy[10] = { 0 };
   char buf[10] = { 0 };
   double sx, sy;
+
+  if (canon->range == NULL) {
+    return FALSE;
+  }
 
   canon->pan_speed = vxspeed;
   canon->tilt_speed = vyspeed;
@@ -950,6 +957,10 @@ gst_cam_controller_canon_move (GstCamControllerCanon * canon, double vxspeed,
   double px = lx / (canon->base.pan_max - canon->base.pan_min);
   double py = ly / (canon->base.tilt_max - canon->base.tilt_min);
   double sx, sy;
+
+  if (canon->range == NULL) {
+    return FALSE;
+  }
 
   canon->pan_speed = vxspeed;
   canon->pan = vx;
@@ -1109,6 +1120,9 @@ gst_cam_controller_canon_zoom (GstCamControllerCanon * canon, double vzspeed,
   char bufs[10] = { 0 };
   char bufz[10] = { 0 };
 
+  if (canon->range == NULL) {
+    return FALSE;
+  }
   //0~7
   if (zspeed < 0)
     zspeed = 0;
