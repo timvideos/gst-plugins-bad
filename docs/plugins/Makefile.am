@@ -63,8 +63,6 @@ EXAMPLE_CFILES = \
 
 EXTRA_HFILES = \
 	$(top_srcdir)/ext/assrender/gstassrender.h \
-	$(top_srcdir)/ext/celt/gstceltdec.h \
-	$(top_srcdir)/ext/celt/gstceltenc.h \
 	$(top_srcdir)/ext/curl/gstcurlbasesink.h \
 	$(top_srcdir)/ext/curl/gstcurlfilesink.h \
 	$(top_srcdir)/ext/curl/gstcurlftpsink.h \
@@ -83,7 +81,6 @@ EXTRA_HFILES = \
 	$(top_srcdir)/ext/kate/gstkatetag.h \
 	$(top_srcdir)/ext/kate/gstkatetiger.h \
 	$(top_srcdir)/ext/ladspa/gstladspa.h \
-	$(top_srcdir)/ext/musicbrainz/gsttrm.h \
 	$(top_srcdir)/ext/mimic/gstmimenc.h \
 	$(top_srcdir)/ext/mimic/gstmimdec.h \
 	$(top_srcdir)/ext/modplug/gstmodplug.h \

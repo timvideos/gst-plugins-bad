@@ -37,8 +37,6 @@ GST_DEBUG_CATEGORY_STATIC (pes_parser_debug);
  * @data: data to parse (starting from, and including, the sync code)
  * @length: size of @data in bytes
  * @res: PESHeader to fill (only valid with #PES_PARSING_OK.
- * @offset: Offset in @data to the data to parse. If #PES_PARSING_OK, offset to
- *	    first byte of data after the header.
  *
  * Parses the mpeg-ts PES header located in @data into the @res.
  *
@@ -47,8 +45,7 @@ GST_DEBUG_CATEGORY_STATIC (pes_parser_debug);
  * is needed to properly parse the header.
  */
 PESParsingResult
-mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res,
-    gint * offset)
+mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res)
 {
   PESParsingResult ret = PES_PARSING_NEED_MORE;
   gsize origlength = length;
@@ -57,11 +54,6 @@ mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res,
   guint8 val8, flags;
 
   g_return_val_if_fail (res != NULL, PES_PARSING_BAD);
-  g_return_val_if_fail (offset != NULL, PES_PARSING_BAD);
-  g_return_val_if_fail (*offset < length, PES_PARSING_BAD);
-
-  data += *offset;
-  length -= *offset;
 
   /* The smallest valid PES header is 6 bytes (prefix + stream_id + length) */
   if (G_UNLIKELY (length < 6))
@@ -113,6 +105,11 @@ mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res,
   res->flags = val8 & 0xf;
 
   GST_LOG ("scrambling_control 0x%0x", res->scrambling_control);
+  GST_LOG ("flags_1: %s%s%s%s%s",
+      val8 & 0x08 ? "priority " : "",
+      val8 & 0x04 ? "data_alignment " : "",
+      val8 & 0x02 ? "copyright " : "",
+      val8 & 0x01 ? "original_or_copy " : "", val8 & 0x0f ? "" : "<none>");
 
   /* PTS_DTS_flags                    2
    * ESCR_flag                        1
@@ -122,7 +119,15 @@ mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res,
    * PES_CRC_flag                     1
    * PES_extension_flag               1*/
   flags = *data++;
-  GST_DEBUG ("PES_flag 0x%02x", flags);
+  GST_LOG ("flags_2: %s%s%s%s%s%s%s%s%s",
+      flags & 0x80 ? "PTS " : "",
+      flags & 0x40 ? "DTS " : "",
+      flags & 0x20 ? "ESCR" : "",
+      flags & 0x10 ? "ES_rate " : "",
+      flags & 0x08 ? "DSM_trick_mode " : "",
+      flags & 0x04 ? "additional_copy_info " : "",
+      flags & 0x02 ? "CRC " : "",
+      flags & 0x01 ? "extension " : "", flags ? "" : "<none>");
 
   /* PES_header_data_length           8 */
   res->header_size = *data++;
@@ -251,7 +256,12 @@ mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res,
   /* PES extension */
   flags = *data++;
   length -= 1;
-  GST_DEBUG ("PES_extension_flag 0x%02x", flags);
+  GST_DEBUG ("PES_extension_flag: %s%s%s%s%s%s",
+      flags & 0x80 ? "PES_private_data " : "",
+      flags & 0x40 ? "pack_header_field " : "",
+      flags & 0x20 ? "program_packet_sequence_counter " : "",
+      flags & 0x10 ? "P-STD_buffer " : "",
+      flags & 0x01 ? "PES_extension_flag_2" : "", flags & 0xf1 ? "" : "<none>");
 
   if (flags & 0x80) {
     /* PES_private data */
@@ -287,7 +297,6 @@ mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res,
       goto need_more_data;
 
     val8 = *data++;
-    /* GRMBL, this is most often wrong */
     if (G_UNLIKELY ((val8 & 0x80) != 0x80))
       goto bad_sequence_marker1;
     res->program_packet_sequence_counter = val8 & 0x7f;
@@ -295,7 +304,6 @@ mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res,
         res->program_packet_sequence_counter);
 
     val8 = *data++;
-    /* GRMBL, this is most often wrong */
     if (G_UNLIKELY ((val8 & 0x80) != 0x80))
       goto bad_sequence_marker2;
     res->MPEG1_MPEG2_identifier = (val8 >> 6) & 0x1;
@@ -319,38 +327,52 @@ mpegts_parse_pes_header (const guint8 * data, gsize length, PESHeader * res,
     length -= 2;
   }
 
-  if (flags & 0x01) {
-    /* Extension flag 2 */
-    if (G_UNLIKELY (length < 1))
-      goto need_more_data;
+  /* jump if we don't have a PES 2nd extension */
+  if (!flags & 0x01)
+    goto stuffing_byte;
 
-    val8 = *data++;
-    length -= 1;
+  /* Extension flag 2 */
+  if (G_UNLIKELY (length < 1))
+    goto need_more_data;
 
-    if (!(val8 & 0x80))
-      goto bad_extension_marker_2;
+  val8 = *data++;
+  length -= 1;
 
-    res->extension_field_length = val8 & 0x7f;
-    if (G_UNLIKELY (length < res->extension_field_length + 1))
-      goto need_more_data;
+  if (!(val8 & 0x80))
+    goto bad_extension_marker_2;
 
-    GST_LOG ("extension_field_length : %" G_GSIZE_FORMAT,
-        res->extension_field_length);
+  res->extension_field_length = val8 & 0x7f;
 
-    if (res->extension_field_length) {
-      flags = *data++;
-      /* Only valid if stream_id_extension_flag == 0x0 */
-      if (!(flags & 0x80)) {
-        res->stream_id_extension = flags & 0x7f;
-        GST_LOG ("stream_id_extension : 0x%02x", res->stream_id_extension);
-        res->stream_id_extension_data = data;
-        GST_MEMDUMP ("stream_id_extension_data",
-            res->stream_id_extension_data, res->extension_field_length);
-      } else
-        GST_WARNING ("What are we meant to do ??");
-      data += res->extension_field_length;
-    }
-    length -= res->extension_field_length + 1;
+  /* Skip empty extensions */
+  if (G_UNLIKELY (res->extension_field_length == 0))
+    goto stuffing_byte;
+
+  if (G_UNLIKELY (length < res->extension_field_length))
+    goto need_more_data;
+
+  flags = *data++;
+  res->extension_field_length -= 1;
+
+  if (!(flags & 0x80)) {
+    /* Only valid if stream_id_extension_flag == 0x0 */
+    res->stream_id_extension = flags;
+    GST_LOG ("stream_id_extension : 0x%02x", res->stream_id_extension);
+  } else if (!(flags & 0x01)) {
+    /* Skip broken streams (that use stream_id_extension with highest bit set
+     * for example ...) */
+    if (G_UNLIKELY (res->extension_field_length < 5))
+      goto stuffing_byte;
+
+    GST_LOG ("TREF field present");
+    data += 5;
+    res->extension_field_length -= 5;
+  }
+
+  /* Extension field data */
+  if (res->extension_field_length) {
+    res->stream_id_extension_data = data;
+    GST_MEMDUMP ("stream_id_extension_data",
+        res->stream_id_extension_data, res->extension_field_length);
   }
 
 stuffing_byte:
@@ -363,7 +385,6 @@ done_parsing:
       origlength, length);
 
   res->header_size = origlength - length;
-  *offset += res->header_size;
   ret = PES_PARSING_OK;
 
   return ret;

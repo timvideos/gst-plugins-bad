@@ -7,6 +7,8 @@
  * Copyright (C) 2012, Collabora Ltd.
  *   Author: Sebastian Dröge <sebastian.droege@collabora.co.uk>
  *
+ * Copyright (C) 2012, Rafaël Carré <funman@videolanorg>
+ *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation
@@ -79,8 +81,7 @@ static gboolean gst_amc_video_dec_start (GstVideoDecoder * decoder);
 static gboolean gst_amc_video_dec_stop (GstVideoDecoder * decoder);
 static gboolean gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
     GstVideoCodecState * state);
-static gboolean gst_amc_video_dec_reset (GstVideoDecoder * decoder,
-    gboolean hard);
+static gboolean gst_amc_video_dec_flush (GstVideoDecoder * decoder);
 static GstFlowReturn gst_amc_video_dec_handle_frame (GstVideoDecoder * decoder,
     GstVideoCodecFrame * frame);
 static GstFlowReturn gst_amc_video_dec_finish (GstVideoDecoder * decoder);
@@ -126,7 +127,8 @@ gst_amc_video_dec_get_type (void)
     _type = g_type_register_static (GST_TYPE_VIDEO_DECODER, "GstAmcVideoDec",
         &info, 0);
 
-    GST_DEBUG_CATEGORY_INIT (gst_amc_video_dec_debug_category, "amcvideodec", 0, "Android MediaCodec video decoder");
+    GST_DEBUG_CATEGORY_INIT (gst_amc_video_dec_debug_category, "amcvideodec", 0,
+        "Android MediaCodec video decoder");
 
     g_once_init_leave (&type, _type);
   }
@@ -160,13 +162,7 @@ create_sink_caps (const GstAmcCodecInfo * codec_info)
 
       if (type->n_profile_levels) {
         for (j = type->n_profile_levels - 1; j >= 0; j--) {
-          const gchar *profile, *level;
-          gint k;
-          GValue va = { 0, };
-          GValue v = { 0, };
-
-          g_value_init (&va, GST_TYPE_LIST);
-          g_value_init (&v, G_TYPE_STRING);
+          const gchar *profile;
 
           profile =
               gst_amc_mpeg4_profile_to_string (type->profile_levels[j].profile);
@@ -176,21 +172,8 @@ create_sink_caps (const GstAmcCodecInfo * codec_info)
             continue;
           }
 
-          for (k = 1; k <= type->profile_levels[j].level && k != 0; k <<= 1) {
-            level = gst_amc_mpeg4_level_to_string (k);
-            if (!level)
-              continue;
-
-            g_value_set_string (&v, level);
-            gst_value_list_append_value (&va, &v);
-            g_value_reset (&v);
-          }
-
           tmp2 = gst_structure_copy (tmp);
           gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile, NULL);
-          gst_structure_set_value (tmp2, "level", &va);
-          g_value_unset (&va);
-          g_value_unset (&v);
           ret = gst_caps_merge_structure (ret, tmp2);
           have_profile_level = TRUE;
         }
@@ -216,13 +199,7 @@ create_sink_caps (const GstAmcCodecInfo * codec_info)
 
       if (type->n_profile_levels) {
         for (j = type->n_profile_levels - 1; j >= 0; j--) {
-          gint profile, level;
-          gint k;
-          GValue va = { 0, };
-          GValue v = { 0, };
-
-          g_value_init (&va, GST_TYPE_LIST);
-          g_value_init (&v, G_TYPE_UINT);
+          gint profile;
 
           profile =
               gst_amc_h263_profile_to_gst_id (type->profile_levels[j].profile);
@@ -233,20 +210,8 @@ create_sink_caps (const GstAmcCodecInfo * codec_info)
             continue;
           }
 
-          for (k = 1; k <= type->profile_levels[j].level && k != 0; k <<= 1) {
-            level = gst_amc_h263_level_to_gst_id (k);
-            if (level == -1)
-              continue;
-
-            g_value_set_uint (&v, level);
-            gst_value_list_append_value (&va, &v);
-            g_value_reset (&v);
-          }
           tmp2 = gst_structure_copy (tmp);
           gst_structure_set (tmp2, "profile", G_TYPE_UINT, profile, NULL);
-          gst_structure_set_value (tmp2, "level", &va);
-          g_value_unset (&va);
-          g_value_unset (&v);
           ret = gst_caps_merge_structure (ret, tmp2);
           have_profile_level = TRUE;
         }
@@ -273,13 +238,7 @@ create_sink_caps (const GstAmcCodecInfo * codec_info)
 
       if (type->n_profile_levels) {
         for (j = type->n_profile_levels - 1; j >= 0; j--) {
-          const gchar *profile, *alternative = NULL, *level;
-          gint k;
-          GValue va = { 0, };
-          GValue v = { 0, };
-
-          g_value_init (&va, GST_TYPE_LIST);
-          g_value_init (&v, G_TYPE_STRING);
+          const gchar *profile, *alternative = NULL;
 
           profile =
               gst_amc_avc_profile_to_string (type->profile_levels[j].profile,
@@ -291,29 +250,14 @@ create_sink_caps (const GstAmcCodecInfo * codec_info)
             continue;
           }
 
-          for (k = 1; k <= type->profile_levels[j].level && k != 0; k <<= 1) {
-            level = gst_amc_avc_level_to_string (k);
-            if (!level)
-              continue;
-
-            g_value_set_string (&v, level);
-            gst_value_list_append_value (&va, &v);
-            g_value_reset (&v);
-          }
           tmp2 = gst_structure_copy (tmp);
           gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile, NULL);
-          gst_structure_set_value (tmp2, "level", &va);
-          if (!alternative)
-            g_value_unset (&va);
-          g_value_unset (&v);
           ret = gst_caps_merge_structure (ret, tmp2);
 
           if (alternative) {
             tmp2 = gst_structure_copy (tmp);
             gst_structure_set (tmp2, "profile", G_TYPE_STRING, alternative,
                 NULL);
-            gst_structure_set_value (tmp2, "level", &va);
-            g_value_unset (&va);
             ret = gst_caps_merge_structure (ret, tmp2);
           }
           have_profile_level = TRUE;
@@ -477,7 +421,7 @@ gst_amc_video_dec_class_init (GstAmcVideoDecClass * klass)
   videodec_class->stop = GST_DEBUG_FUNCPTR (gst_amc_video_dec_stop);
   videodec_class->open = GST_DEBUG_FUNCPTR (gst_amc_video_dec_open);
   videodec_class->close = GST_DEBUG_FUNCPTR (gst_amc_video_dec_close);
-  videodec_class->reset = GST_DEBUG_FUNCPTR (gst_amc_video_dec_reset);
+  videodec_class->flush = GST_DEBUG_FUNCPTR (gst_amc_video_dec_flush);
   videodec_class->set_format = GST_DEBUG_FUNCPTR (gst_amc_video_dec_set_format);
   videodec_class->handle_frame =
       GST_DEBUG_FUNCPTR (gst_amc_video_dec_handle_frame);
@@ -697,6 +641,7 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
   gint crop_left, crop_right;
   gint crop_top, crop_bottom;
   GstVideoFormat gst_format;
+  GstAmcVideoDecClass *klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
 
   if (!gst_amc_format_get_int (format, "color-format", &color_format) ||
       !gst_amc_format_get_int (format, "width", &width) ||
@@ -704,6 +649,10 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
     GST_ERROR_OBJECT (self, "Failed to get output format metadata");
     return FALSE;
   }
+
+  if (strcmp (klass->codec_info->name, "OMX.k3.video.decoder.avc") == 0 &&
+      color_format == COLOR_FormatYCbYCr)
+    color_format = COLOR_TI_FormatYUV420PackedSemiPlanar;
 
   if (!gst_amc_format_get_int (format, "stride", &stride) ||
       !gst_amc_format_get_int (format, "slice-height", &slice_height)) {
@@ -759,6 +708,30 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
   self->input_state_changed = FALSE;
 
   return TRUE;
+}
+
+/*
+ * The format is called QOMX_COLOR_FormatYUV420PackedSemiPlanar64x32Tile2m8ka.
+ * Which is actually NV12 (interleaved U&V).
+ */
+#define TILE_WIDTH 64
+#define TILE_HEIGHT 32
+#define TILE_SIZE (TILE_WIDTH * TILE_HEIGHT)
+#define TILE_GROUP_SIZE (4 * TILE_SIZE)
+
+/* get frame tile coordinate. XXX: nothing to be understood here, don't try. */
+static size_t
+tile_pos (size_t x, size_t y, size_t w, size_t h)
+{
+  size_t flim = x + (y & ~1) * w;
+
+  if (y & 1) {
+    flim += (x & ~3) + 2;
+  } else if ((h & 1) == 0 || y != (h - 1)) {
+    flim += (x + 2) & ~3;
+  }
+
+  return flim;
 }
 
 /* The weird handling of cropping, alignment and everything is taken from
@@ -841,13 +814,20 @@ gst_amc_video_dec_fill_buffer (GstAmcVideoDec * self, gint idx,
           src += self->crop_left;
           row_length = self->width;
         } else if (i > 0) {
+          /* skip the Y plane */
           src += slice_height * stride;
-          src += self->crop_top * src_stride;
+
+          /* crop_top/crop_left divided by two
+           * because one byte of the U/V planes
+           * corresponds to two pixels horizontally/vertically */
+          src += self->crop_top / 2 * src_stride;
           src += self->crop_left / 2;
           row_length = (self->width + 1) / 2;
         }
-        if (i == 2)
+        if (i == 2) {
+          /* skip the U plane */
           src += ((slice_height + 1) / 2) * ((stride + 1) / 2);
+        }
 
         dest = GST_VIDEO_FRAME_COMP_DATA (&vframe, i);
         height = GST_VIDEO_FRAME_COMP_HEIGHT (&vframe, i);
@@ -913,7 +893,7 @@ gst_amc_video_dec_fill_buffer (GstAmcVideoDec * self, gint idx,
     case COLOR_FormatYUV420SemiPlanar:{
       gint i, j, height;
       guint8 *src, *dest;
-      gint src_stride, dest_stride;
+      gint src_stride, dest_stride, fixed_stride;
       gint row_length;
       GstVideoFrame vframe;
 
@@ -923,25 +903,30 @@ gst_amc_video_dec_fill_buffer (GstAmcVideoDec * self, gint idx,
         goto done;
       }
 
-      /* FIXME: This is untested! */
+      /* Samsung Galaxy S3 seems to report wrong strides.
+         I.e. BigBuckBunny 854x480 H264 reports a stride of 864 when it is
+         actually 854, so we use width instead of stride here.
+         This is obviously bound to break in the future. */
+      if (g_str_has_prefix (klass->codec_info->name, "OMX.SEC.")) {
+        fixed_stride = self->width;
+      } else {
+        fixed_stride = self->stride;
+      }
+
       gst_video_frame_map (&vframe, info, outbuf, GST_MAP_WRITE);
+
       for (i = 0; i < 2; i++) {
-        if (i == 0) {
-          src_stride = self->stride;
-          dest_stride = GST_VIDEO_FRAME_COMP_STRIDE (&vframe, i);
-        } else {
-          src_stride = self->stride;
-          dest_stride = GST_VIDEO_FRAME_COMP_STRIDE (&vframe, i);
-        }
+        src_stride = fixed_stride;
+        dest_stride = GST_VIDEO_FRAME_COMP_STRIDE (&vframe, i);
 
         src = buf->data + buffer_info->offset;
         if (i == 0) {
-          src += self->crop_top * self->stride;
+          src += self->crop_top * fixed_stride;
           src += self->crop_left;
           row_length = self->width;
         } else if (i == 1) {
-          src += self->slice_height * self->stride;
-          src += self->crop_top * self->stride;
+          src += self->slice_height * fixed_stride;
+          src += self->crop_top * fixed_stride;
           src += self->crop_left;
           row_length = self->width;
         }
@@ -958,6 +943,88 @@ gst_amc_video_dec_fill_buffer (GstAmcVideoDec * self, gint idx,
       gst_video_frame_unmap (&vframe);
       ret = TRUE;
       break;
+    }
+      /* FIXME: This should be in libgstvideo as MT12 or similar, see v4l2 */
+    case COLOR_QCOM_FormatYUV420PackedSemiPlanar64x32Tile2m8ka:{
+      GstVideoFrame vframe;
+      gint width = self->width;
+      gint height = self->height;
+      gint dest_luma_stride, dest_chroma_stride;
+      guint8 *src = buf->data + buffer_info->offset;
+      guint8 *dest_luma, *dest_chroma;
+      gint y;
+      const size_t tile_w = (width - 1) / TILE_WIDTH + 1;
+      const size_t tile_w_align = (tile_w + 1) & ~1;
+      const size_t tile_h_luma = (height - 1) / TILE_HEIGHT + 1;
+      const size_t tile_h_chroma = (height / 2 - 1) / TILE_HEIGHT + 1;
+      size_t luma_size = tile_w_align * tile_h_luma * TILE_SIZE;
+
+      gst_video_frame_map (&vframe, info, outbuf, GST_MAP_WRITE);
+      dest_luma = GST_VIDEO_FRAME_PLANE_DATA (&vframe, 0);
+      dest_chroma = GST_VIDEO_FRAME_PLANE_DATA (&vframe, 1);
+      dest_luma_stride = GST_VIDEO_FRAME_COMP_STRIDE (&vframe, 0);
+      dest_chroma_stride = GST_VIDEO_FRAME_COMP_STRIDE (&vframe, 1);
+
+      if ((luma_size % TILE_GROUP_SIZE) != 0)
+        luma_size = (((luma_size - 1) / TILE_GROUP_SIZE) + 1) * TILE_GROUP_SIZE;
+
+      for (y = 0; y < tile_h_luma; y++) {
+        size_t row_width = width;
+        gint x;
+
+        for (x = 0; x < tile_w; x++) {
+          size_t tile_width = row_width;
+          size_t tile_height = height;
+          gint luma_idx;
+          gint chroma_idx;
+          /* luma source pointer for this tile */
+          const uint8_t *src_luma = src
+              + tile_pos (x, y, tile_w_align, tile_h_luma) * TILE_SIZE;
+
+          /* chroma source pointer for this tile */
+          const uint8_t *src_chroma = src + luma_size
+              + tile_pos (x, y / 2, tile_w_align, tile_h_chroma) * TILE_SIZE;
+          if (y & 1)
+            src_chroma += TILE_SIZE / 2;
+
+          /* account for right columns */
+          if (tile_width > TILE_WIDTH)
+            tile_width = TILE_WIDTH;
+
+          /* account for bottom rows */
+          if (tile_height > TILE_HEIGHT)
+            tile_height = TILE_HEIGHT;
+
+          /* dest luma memory index for this tile */
+          luma_idx = y * TILE_HEIGHT * dest_luma_stride + x * TILE_WIDTH;
+
+          /* dest chroma memory index for this tile */
+          /* XXX: remove divisions */
+          chroma_idx =
+              y * TILE_HEIGHT / 2 * dest_chroma_stride + x * TILE_WIDTH;
+
+          tile_height /= 2;     // we copy 2 luma lines at once
+          while (tile_height--) {
+            memcpy (dest_luma + luma_idx, src_luma, tile_width);
+            src_luma += TILE_WIDTH;
+            luma_idx += dest_luma_stride;
+
+            memcpy (dest_luma + luma_idx, src_luma, tile_width);
+            src_luma += TILE_WIDTH;
+            luma_idx += dest_luma_stride;
+
+            memcpy (dest_chroma + chroma_idx, src_chroma, tile_width);
+            src_chroma += TILE_WIDTH;
+            chroma_idx += dest_chroma_stride;
+          }
+          row_width -= TILE_WIDTH;
+        }
+        height -= TILE_HEIGHT;
+      }
+      gst_video_frame_unmap (&vframe);
+      ret = TRUE;
+      break;
+
     }
     default:
       GST_ERROR_OBJECT (self, "Unsupported color format %d",
@@ -1426,13 +1493,13 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
 }
 
 static gboolean
-gst_amc_video_dec_reset (GstVideoDecoder * decoder, gboolean hard)
+gst_amc_video_dec_flush (GstVideoDecoder * decoder)
 {
   GstAmcVideoDec *self;
 
   self = GST_AMC_VIDEO_DEC (decoder);
 
-  GST_DEBUG_OBJECT (self, "Resetting decoder");
+  GST_DEBUG_OBJECT (self, "Flushing decoder");
 
   if (!self->started) {
     GST_DEBUG_OBJECT (self, "Codec not started yet");
@@ -1458,7 +1525,7 @@ gst_amc_video_dec_reset (GstVideoDecoder * decoder, gboolean hard)
   gst_pad_start_task (GST_VIDEO_DECODER_SRC_PAD (self),
       (GstTaskFunction) gst_amc_video_dec_loop, decoder, NULL);
 
-  GST_DEBUG_OBJECT (self, "Reset decoder");
+  GST_DEBUG_OBJECT (self, "Flushed decoder");
 
   return TRUE;
 }

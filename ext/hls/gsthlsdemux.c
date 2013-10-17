@@ -255,6 +255,9 @@ gst_hls_demux_init (GstHLSDemux * demux)
   demux->stream_task =
       gst_task_new ((GstTaskFunction) gst_hls_demux_stream_loop, demux, NULL);
   gst_task_set_lock (demux->stream_task, &demux->stream_lock);
+
+  demux->have_group_id = FALSE;
+  demux->group_id = G_MAXUINT;
 }
 
 static void
@@ -310,6 +313,7 @@ gst_hls_demux_change_state (GstElement * element, GstStateChange transition)
   switch (transition) {
     case GST_STATE_CHANGE_READY_TO_PAUSED:
       gst_hls_demux_reset (demux, FALSE);
+      gst_uri_downloader_reset (demux->downloader);
       break;
     default:
       break;
@@ -430,6 +434,7 @@ gst_hls_demux_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
       }
 
       demux->cancelled = FALSE;
+      gst_uri_downloader_reset (demux->downloader);
       gst_task_start (demux->stream_task);
       g_rec_mutex_unlock (&demux->stream_lock);
 
@@ -467,7 +472,9 @@ gst_hls_demux_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       query = gst_query_new_uri ();
       ret = gst_pad_peer_query (demux->sinkpad, query);
       if (ret) {
-        gst_query_parse_uri (query, &uri);
+        gst_query_parse_uri_redirection (query, &uri);
+        if (uri == NULL)
+          gst_query_parse_uri (query, &uri);
         gst_hls_demux_set_location (demux, uri);
         g_free (uri);
       }
@@ -637,6 +644,7 @@ static void
 switch_pads (GstHLSDemux * demux, GstCaps * newcaps)
 {
   GstPad *oldpad = demux->srcpad;
+  GstEvent *event;
   gchar *stream_id;
 
   GST_DEBUG ("Switching pads (oldpad:%p) with caps: %" GST_PTR_FORMAT, oldpad,
@@ -653,7 +661,23 @@ switch_pads (GstHLSDemux * demux, GstCaps * newcaps)
 
   stream_id =
       gst_pad_create_stream_id (demux->srcpad, GST_ELEMENT_CAST (demux), NULL);
-  gst_pad_push_event (demux->srcpad, gst_event_new_stream_start (stream_id));
+
+  event = gst_pad_get_sticky_event (demux->sinkpad, GST_EVENT_STREAM_START, 0);
+  if (event) {
+    if (gst_event_parse_group_id (event, &demux->group_id))
+      demux->have_group_id = TRUE;
+    else
+      demux->have_group_id = FALSE;
+    gst_event_unref (event);
+  } else if (!demux->have_group_id) {
+    demux->have_group_id = TRUE;
+    demux->group_id = gst_util_group_id_next ();
+  }
+  event = gst_event_new_stream_start (stream_id);
+  if (demux->have_group_id)
+    gst_event_set_group_id (event, demux->group_id);
+
+  gst_pad_push_event (demux->srcpad, event);
   g_free (stream_id);
 
   gst_pad_set_caps (demux->srcpad, newcaps);
@@ -820,6 +844,9 @@ gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose)
 
   demux->position_shift = 0;
   demux->need_segment = TRUE;
+
+  demux->have_group_id = FALSE;
+  demux->group_id = G_MAXUINT;
 }
 
 static gboolean
@@ -900,7 +927,7 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
       if (!gst_hls_demux_get_next_fragment (demux, FALSE)) {
         if (demux->cancelled) {
           goto quit;
-        } else if (!demux->end_of_playlist && !demux->cancelled) {
+        } else if (!demux->end_of_playlist) {
           demux->client->update_failed_count++;
           if (demux->client->update_failed_count < DEFAULT_FAILED_COUNT) {
             GST_WARNING_OBJECT (demux, "Could not fetch the next fragment");
@@ -1186,11 +1213,12 @@ gst_hls_demux_switch_playlist (GstHLSDemux * demux)
   GstClockTime diff;
   gsize size;
   gint bitrate;
-  GstFragment *fragment = g_queue_peek_tail (demux->queue);
+  GstFragment *fragment;
   GstBuffer *buffer;
 
   GST_M3U8_CLIENT_LOCK (demux->client);
-  if (!demux->client->main->lists) {
+  fragment = g_queue_peek_tail (demux->queue);
+  if (!demux->client->main->lists || !fragment) {
     GST_M3U8_CLIENT_UNLOCK (demux->client);
     return TRUE;
   }
@@ -1220,6 +1248,7 @@ gst_hls_demux_decrypt_fragment (GstHLSDemux * demux,
   GstMapInfo key_info, encrypted_info, decrypted_info;
   gnutls_cipher_hd_t aes_ctx;
   gnutls_datum_t key_d, iv_d;
+  gsize unpadded_size;
 
   GST_INFO_OBJECT (demux, "Fetching key %s", key);
   key_fragment = gst_uri_downloader_fetch_uri (demux->downloader, key);
@@ -1246,9 +1275,15 @@ gst_hls_demux_decrypt_fragment (GstHLSDemux * demux,
       decrypted_info.data, decrypted_info.size);
   gnutls_cipher_deinit (aes_ctx);
 
+  /* Handle pkcs7 unpadding here */
+  unpadded_size =
+      decrypted_info.size - decrypted_info.data[decrypted_info.size - 1];
+
   gst_buffer_unmap (decrypted_buffer, &decrypted_info);
   gst_buffer_unmap (encrypted_buffer, &encrypted_info);
   gst_buffer_unmap (key_buffer, &key_info);
+
+  gst_buffer_resize (decrypted_buffer, 0, unpadded_size);
 
   gst_buffer_unref (key_buffer);
   gst_buffer_unref (encrypted_buffer);
@@ -1329,7 +1364,6 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
 
 error:
   {
-    gst_hls_demux_stop (demux);
     return FALSE;
   }
 }

@@ -36,7 +36,7 @@ HFILE_GLOB=$(top_srcdir)/gst-libs/gst/*/*.h
 CFILE_GLOB=$(top_srcdir)/gst-libs/gst/*/*.c
 
 # Header files to ignore when scanning.
-IGNORE_HFILES =
+IGNORE_HFILES = $(top_srcdir)/gst-libs/gst/mpegts/gstmpegts-private.h
 
 # Images to copy into HTML directory.
 HTML_IMAGES =
@@ -54,8 +54,9 @@ GTKDOC_LIBS = \
 	$(top_builddir)/gst-libs/gst/codecparsers/libgstcodecparsers-@GST_API_VERSION@.la \
 	$(top_builddir)/gst-libs/gst/basecamerabinsrc/libgstbasecamerabinsrc-@GST_API_VERSION@.la \
 	$(top_builddir)/gst-libs/gst/interfaces/libgstphotography-@GST_API_VERSION@.la \
-	$(top_builddir)/gst-libs/gst/signalprocessor/libgstsignalprocessor-@GST_API_VERSION@.la \
 	$(top_builddir)/gst-libs/gst/insertbin/libgstinsertbin-@GST_API_VERSION@.la \
+	$(top_builddir)/gst-libs/gst/uridownloader/libgsturidownloader-@GST_API_VERSION@.la \
+	$(top_builddir)/gst-libs/gst/mpegts/libgstmpegts-@GST_API_VERSION@.la \
   $(GST_BASE_LIBS)
 
 GTKDOC_CC=$(LIBTOOL) --tag=CC --mode=compile $(CC)

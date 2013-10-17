@@ -53,9 +53,13 @@ struct _GstTSDemux
 {
   MpegTSBase parent;
 
+  gboolean have_group_id;
+  guint group_id;
+
   /* the following vars must be protected with the OBJECT_LOCK as they can be
    * accessed from the application thread and the streaming thread */
-  guint program_number;		/* Required program number (ignore:-1) */
+  gint requested_program_number; /* Required program number (ignore:-1) */
+  guint program_number;
   gboolean emit_statistics;
 
   /*< private >*/
@@ -72,6 +76,9 @@ struct _GstTSDemux
 
   /* Full stream duration */
   GstClockTime duration;
+
+  /* Pending seek rate (default 1.0) */
+  gdouble rate;
 };
 
 struct _GstTSDemuxClass

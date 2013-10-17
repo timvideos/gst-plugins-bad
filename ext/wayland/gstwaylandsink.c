@@ -59,13 +59,17 @@ enum
 GST_DEBUG_CATEGORY (gstwayland_debug);
 #define GST_CAT_DEFAULT gstwayland_debug
 
+#if G_BYTE_ORDER == G_BIG_ENDIAN
+#define CAPS "{xRGB, ARGB}"
+#else
+#define CAPS "{BGRx, BGRA}"
+#endif
+
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-raw, "
-        "format = (string) BGRA, "
-        "framerate = (fraction) [ 0, MAX ], "
-        "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ] "));
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (CAPS))
+    );
 
 /*Fixme: Add more interfaces */
 #define gst_wayland_sink_parent_class parent_class
@@ -80,7 +84,6 @@ static GstCaps *gst_wayland_sink_get_caps (GstBaseSink * bsink,
     GstCaps * filter);
 static gboolean gst_wayland_sink_set_caps (GstBaseSink * bsink, GstCaps * caps);
 static gboolean gst_wayland_sink_start (GstBaseSink * bsink);
-static gboolean gst_wayland_sink_stop (GstBaseSink * bsink);
 static gboolean gst_wayland_sink_preroll (GstBaseSink * bsink,
     GstBuffer * buffer);
 static gboolean
@@ -96,6 +99,50 @@ static void frame_redraw_callback (void *data,
 static void create_window (GstWaylandSink * sink, struct display *display,
     int width, int height);
 static void shm_pool_destroy (struct shm_pool *pool);
+
+typedef struct
+{
+  uint32_t wl_format;
+  GstVideoFormat gst_format;
+} wl_VideoFormat;
+
+static const wl_VideoFormat formats[] = {
+#if G_BYTE_ORDER == G_BIG_ENDIAN
+  {WL_SHM_FORMAT_XRGB8888, GST_VIDEO_FORMAT_xRGB},
+  {WL_SHM_FORMAT_ARGB8888, GST_VIDEO_FORMAT_ARGB},
+#else
+  {WL_SHM_FORMAT_XRGB8888, GST_VIDEO_FORMAT_BGRx},
+  {WL_SHM_FORMAT_ARGB8888, GST_VIDEO_FORMAT_BGRA},
+#endif
+};
+
+static uint32_t
+gst_wayland_format_to_wl_format (GstVideoFormat format)
+{
+  guint i;
+
+  for (i = 0; i < G_N_ELEMENTS (formats); i++)
+    if (formats[i].gst_format == format)
+      return formats[i].wl_format;
+
+  GST_WARNING ("wayland video format not found");
+  return -1;
+}
+
+#ifndef GST_DISABLE_GST_DEBUG
+static const gchar *
+gst_wayland_format_to_string (uint32_t wl_format)
+{
+  guint i;
+  GstVideoFormat format = GST_VIDEO_FORMAT_UNKNOWN;
+
+  for (i = 0; i < G_N_ELEMENTS (formats); i++)
+    if (formats[i].wl_format == wl_format)
+      format = formats[i].gst_format;
+
+  return gst_video_format_to_string (format);
+}
+#endif
 
 static void
 gst_wayland_sink_class_init (GstWaylandSinkClass * klass)
@@ -123,7 +170,6 @@ gst_wayland_sink_class_init (GstWaylandSinkClass * klass)
   gstbasesink_class->get_caps = GST_DEBUG_FUNCPTR (gst_wayland_sink_get_caps);
   gstbasesink_class->set_caps = GST_DEBUG_FUNCPTR (gst_wayland_sink_set_caps);
   gstbasesink_class->start = GST_DEBUG_FUNCPTR (gst_wayland_sink_start);
-  gstbasesink_class->stop = GST_DEBUG_FUNCPTR (gst_wayland_sink_stop);
   gstbasesink_class->preroll = GST_DEBUG_FUNCPTR (gst_wayland_sink_preroll);
   gstbasesink_class->propose_allocation =
       GST_DEBUG_FUNCPTR (gst_wayland_sink_propose_allocation);
@@ -317,14 +363,25 @@ create_display (void)
 
   wl_display_roundtrip (display->display);
 
-  if (!(display->formats & (1 << WL_SHM_FORMAT_XRGB8888))) {
-    GST_ERROR ("WL_SHM_FORMAT_XRGB32 not available");
-    return NULL;
-  }
-
   wl_display_get_fd (display->display);
 
   return display;
+}
+
+static gboolean
+gst_wayland_sink_format_from_caps (uint32_t * wl_format, GstCaps * caps)
+{
+  GstStructure *structure;
+  const gchar *format;
+  GstVideoFormat fmt;
+
+  structure = gst_caps_get_structure (caps, 0);
+  format = gst_structure_get_string (structure, "format");
+  fmt = gst_video_format_from_string (format);
+
+  *wl_format = gst_wayland_format_to_wl_format (fmt);
+
+  return (*wl_format != -1);
 }
 
 static gboolean
@@ -343,6 +400,15 @@ gst_wayland_sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
 
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_format;
+
+  if (!gst_wayland_sink_format_from_caps (&sink->format, caps))
+    goto invalid_format;
+
+  if (!(sink->display->formats & (1 << sink->format))) {
+    GST_DEBUG_OBJECT (sink, "%s not available",
+        gst_wayland_format_to_string (sink->format));
+    return FALSE;
+  }
 
   sink->video_width = info.width;
   sink->video_height = info.height;
@@ -459,16 +525,6 @@ gst_wayland_sink_start (GstBaseSink * bsink)
   }
 
   return result;
-}
-
-static gboolean
-gst_wayland_sink_stop (GstBaseSink * bsink)
-{
-  GstWaylandSink *sink = (GstWaylandSink *) bsink;
-
-  GST_DEBUG_OBJECT (sink, "stop");
-
-  return TRUE;
 }
 
 static gboolean

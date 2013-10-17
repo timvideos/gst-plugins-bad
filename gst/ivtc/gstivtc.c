@@ -59,21 +59,12 @@ GST_DEBUG_CATEGORY_STATIC (gst_ivtc_debug_category);
 /* prototypes */
 
 
-static void gst_ivtc_set_property (GObject * object,
-    guint property_id, const GValue * value, GParamSpec * pspec);
-static void gst_ivtc_get_property (GObject * object,
-    guint property_id, GValue * value, GParamSpec * pspec);
-static void gst_ivtc_dispose (GObject * object);
-static void gst_ivtc_finalize (GObject * object);
-
 static GstCaps *gst_ivtc_transform_caps (GstBaseTransform * trans,
     GstPadDirection direction, GstCaps * caps, GstCaps * filter);
 static GstCaps *gst_ivtc_fixate_caps (GstBaseTransform * trans,
     GstPadDirection direction, GstCaps * caps, GstCaps * othercaps);
 static gboolean gst_ivtc_set_caps (GstBaseTransform * trans, GstCaps * incaps,
     GstCaps * outcaps);
-static gboolean gst_ivtc_start (GstBaseTransform * trans);
-static gboolean gst_ivtc_stop (GstBaseTransform * trans);
 static gboolean gst_ivtc_sink_event (GstBaseTransform * trans,
     GstEvent * event);
 static GstFlowReturn gst_ivtc_transform (GstBaseTransform * trans,
@@ -123,7 +114,6 @@ G_DEFINE_TYPE_WITH_CODE (GstIvtc, gst_ivtc, GST_TYPE_BASE_TRANSFORM,
 static void
 gst_ivtc_class_init (GstIvtcClass * klass)
 {
-  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstBaseTransformClass *base_transform_class =
       GST_BASE_TRANSFORM_CLASS (klass);
 
@@ -138,16 +128,10 @@ gst_ivtc_class_init (GstIvtcClass * klass)
       "Inverse Telecine", "Video/Filter", "Inverse Telecine Filter",
       "David Schleef <ds@schleef.org>");
 
-  gobject_class->set_property = gst_ivtc_set_property;
-  gobject_class->get_property = gst_ivtc_get_property;
-  gobject_class->dispose = gst_ivtc_dispose;
-  gobject_class->finalize = gst_ivtc_finalize;
   base_transform_class->transform_caps =
       GST_DEBUG_FUNCPTR (gst_ivtc_transform_caps);
   base_transform_class->fixate_caps = GST_DEBUG_FUNCPTR (gst_ivtc_fixate_caps);
   base_transform_class->set_caps = GST_DEBUG_FUNCPTR (gst_ivtc_set_caps);
-  base_transform_class->start = GST_DEBUG_FUNCPTR (gst_ivtc_start);
-  base_transform_class->stop = GST_DEBUG_FUNCPTR (gst_ivtc_stop);
   base_transform_class->sink_event = GST_DEBUG_FUNCPTR (gst_ivtc_sink_event);
   base_transform_class->transform = GST_DEBUG_FUNCPTR (gst_ivtc_transform);
 }
@@ -155,60 +139,6 @@ gst_ivtc_class_init (GstIvtcClass * klass)
 static void
 gst_ivtc_init (GstIvtc * ivtc)
 {
-}
-
-void
-gst_ivtc_set_property (GObject * object, guint property_id,
-    const GValue * value, GParamSpec * pspec)
-{
-  GstIvtc *ivtc = GST_IVTC (object);
-
-  GST_DEBUG_OBJECT (ivtc, "set_property");
-
-  switch (property_id) {
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
-      break;
-  }
-}
-
-void
-gst_ivtc_get_property (GObject * object, guint property_id,
-    GValue * value, GParamSpec * pspec)
-{
-  GstIvtc *ivtc = GST_IVTC (object);
-
-  GST_DEBUG_OBJECT (ivtc, "get_property");
-
-  switch (property_id) {
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
-      break;
-  }
-}
-
-void
-gst_ivtc_dispose (GObject * object)
-{
-  GstIvtc *ivtc = GST_IVTC (object);
-
-  GST_DEBUG_OBJECT (ivtc, "dispose");
-
-  /* clean up as possible.  may be called multiple times */
-
-  G_OBJECT_CLASS (gst_ivtc_parent_class)->dispose (object);
-}
-
-void
-gst_ivtc_finalize (GObject * object)
-{
-  GstIvtc *ivtc = GST_IVTC (object);
-
-  GST_DEBUG_OBJECT (ivtc, "finalize");
-
-  /* clean up object here */
-
-  G_OBJECT_CLASS (gst_ivtc_parent_class)->finalize (object);
 }
 
 static GstCaps *
@@ -271,7 +201,20 @@ gst_ivtc_fixate_caps (GstBaseTransform * trans, GstPadDirection direction,
 
   result = gst_caps_make_writable (othercaps);
   if (direction == GST_PAD_SINK) {
-    gst_caps_set_simple (result, "framerate", GST_TYPE_FRACTION, 24, 1, NULL);
+    GstVideoInfo info;
+    if (gst_video_info_from_caps (&info, caps)) {
+      /* Smarter decision */
+      GST_DEBUG_OBJECT (trans, "Input framerate is %d/%d", info.fps_n,
+          info.fps_d);
+      if (info.fps_n == 30000 && info.fps_d == 1001)
+        gst_caps_set_simple (result, "framerate", GST_TYPE_FRACTION, 24000,
+            1001, NULL);
+      else
+        gst_caps_set_simple (result, "framerate", GST_TYPE_FRACTION, 24, 1,
+            NULL);
+    } else {
+      gst_caps_set_simple (result, "framerate", GST_TYPE_FRACTION, 24, 1, NULL);
+    }
   }
 
   result = gst_caps_fixate (result);
@@ -292,28 +235,6 @@ gst_ivtc_set_caps (GstBaseTransform * trans, GstCaps * incaps,
       ivtc->sink_video_info.fps_d, ivtc->sink_video_info.fps_n * 2);
   GST_DEBUG_OBJECT (trans, "field duration %" GST_TIME_FORMAT,
       GST_TIME_ARGS (ivtc->field_duration));
-
-  return TRUE;
-}
-
-/* states */
-static gboolean
-gst_ivtc_start (GstBaseTransform * trans)
-{
-  GstIvtc *ivtc = GST_IVTC (trans);
-
-  GST_DEBUG_OBJECT (ivtc, "start");
-
-  return TRUE;
-}
-
-static gboolean
-gst_ivtc_stop (GstBaseTransform * trans)
-{
-  GstIvtc *ivtc = GST_IVTC (trans);
-
-  GST_DEBUG_OBJECT (ivtc, "stop");
-  gst_ivtc_flush (ivtc);
 
   return TRUE;
 }
@@ -345,7 +266,9 @@ gst_ivtc_sink_event (GstBaseTransform * trans, GstEvent * event)
 static void
 gst_ivtc_flush (GstIvtc * ivtc)
 {
-  GST_FIXME_OBJECT (ivtc, "not sending flushed fields to srcpad");
+  if (ivtc->n_fields > 0) {
+    GST_FIXME_OBJECT (ivtc, "not sending flushed fields to srcpad");
+  }
 
   gst_ivtc_retire_fields (ivtc, ivtc->n_fields);
 }
@@ -443,6 +366,24 @@ reconstruct (GstIvtc * ivtc, GstVideoFrame * dest_frame, int i1, int i2)
 
 }
 
+static int
+reconstruct_line (guint8 * line1, guint8 * line2, int i, int a, int b, int c,
+    int d)
+{
+  int x;
+
+  x = line1[i - 3] * a;
+  x += line1[i - 2] * b;
+  x += line1[i - 1] * c;
+  x += line1[i - 0] * d;
+  x += line2[i + 0] * d;
+  x += line2[i + 1] * c;
+  x += line2[i + 2] * b;
+  x += line2[i + 3] * a;
+  return (x + 16) >> 5;
+}
+
+
 static void
 reconstruct_single (GstIvtc * ivtc, GstVideoFrame * dest_frame, int i1)
 {
@@ -452,7 +393,77 @@ reconstruct_single (GstIvtc * ivtc, GstVideoFrame * dest_frame, int i1)
   int width;
   GstIvtcField *field = &ivtc->fields[i1];
 
-  for (k = 0; k < 3; k++) {
+  for (k = 0; k < 1; k++) {
+    height = GST_VIDEO_FRAME_COMP_HEIGHT (dest_frame, k);
+    width = GST_VIDEO_FRAME_COMP_WIDTH (dest_frame, k);
+    for (j = 0; j < height; j++) {
+      if ((j & 1) == field->parity) {
+        memcpy (GET_LINE (dest_frame, k, j),
+            GET_LINE (&field->frame, k, j), width);
+      } else {
+        if (j == 0 || j == height - 1) {
+          memcpy (GET_LINE (dest_frame, k, j),
+              GET_LINE (&field->frame, k, (j ^ 1)), width);
+        } else {
+          guint8 *dest = GET_LINE (dest_frame, k, j);
+          guint8 *line1 = GET_LINE (&field->frame, k, j - 1);
+          guint8 *line2 = GET_LINE (&field->frame, k, j + 1);
+          int i;
+
+#define MARGIN 3
+          for (i = MARGIN; i < width - MARGIN; i++) {
+            int dx, dy;
+
+            dx = -line1[i - 1] - line2[i - 1] + line1[i + 1] + line2[i + 1];
+            dx *= 2;
+
+            dy = -line1[i - 1] - 2 * line1[i] - line1[i + 1]
+                + line2[i - 1] + 2 * line2[i] + line2[i + 1];
+            if (dy < 0) {
+              dy = -dy;
+              dx = -dx;
+            }
+
+            if (dx == 0 && dy == 0) {
+              dest[i] = (line1[i] + line2[i] + 1) >> 1;
+            } else if (dx < 0) {
+              if (dx < -2 * dy) {
+                dest[i] = reconstruct_line (line1, line2, i, 0, 0, 0, 16);
+              } else if (dx < -dy) {
+                dest[i] = reconstruct_line (line1, line2, i, 0, 0, 8, 8);
+              } else if (2 * dx < -dy) {
+                dest[i] = reconstruct_line (line1, line2, i, 0, 4, 8, 4);
+              } else if (3 * dx < -dy) {
+                dest[i] = reconstruct_line (line1, line2, i, 1, 7, 7, 1);
+              } else {
+                dest[i] = reconstruct_line (line1, line2, i, 4, 8, 4, 0);
+              }
+            } else {
+              if (dx > 2 * dy) {
+                dest[i] = reconstruct_line (line2, line1, i, 0, 0, 0, 16);
+              } else if (dx > dy) {
+                dest[i] = reconstruct_line (line2, line1, i, 0, 0, 8, 8);
+              } else if (2 * dx > dy) {
+                dest[i] = reconstruct_line (line2, line1, i, 0, 4, 8, 4);
+              } else if (3 * dx > dy) {
+                dest[i] = reconstruct_line (line2, line1, i, 1, 7, 7, 1);
+              } else {
+                dest[i] = reconstruct_line (line2, line1, i, 4, 8, 4, 0);
+              }
+            }
+          }
+
+          for (i = 0; i < MARGIN; i++) {
+            dest[i] = (line1[i] + line2[i] + 1) >> 1;
+          }
+          for (i = width - MARGIN; i < width; i++) {
+            dest[i] = (line1[i] + line2[i] + 1) >> 1;
+          }
+        }
+      }
+    }
+  }
+  for (k = 1; k < 3; k++) {
     height = GST_VIDEO_FRAME_COMP_HEIGHT (dest_frame, k);
     width = GST_VIDEO_FRAME_COMP_WIDTH (dest_frame, k);
     for (j = 0; j < height; j++) {

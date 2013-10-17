@@ -34,12 +34,6 @@ else
 CDAUDIO_DIR=
 endif
 
-if USE_CELT
-CELT_DIR=celt
-else
-CELT_DIR=
-endif
-
 if USE_CHROMAPRINT
 CHROMAPRINT_DIR=chromaprint
 else
@@ -52,16 +46,16 @@ else
 CURL_DIR=
 endif
 
+if USE_DASH
+DASH_DIR=dash
+else
+DASH_DIR=
+endif
+
 if USE_DC1394
 DC1394_DIR=dc1394
 else
 DC1394_DIR=
-endif
-
-if USE_DIRAC
-DIRAC_DIR=dirac
-else
-DIRAC_DIR=
 endif
 
 if USE_DIRECTFB
@@ -74,6 +68,12 @@ if USE_WAYLAND
 WAYLAND_DIR=wayland
 else
 WAYLAND_DIR=
+endif
+
+if USE_DAALA
+DAALA_DIR=daala
+else
+DAALA_DIR=
 endif
 
 if USE_DTS
@@ -196,12 +196,6 @@ else
 MUSEPACK_DIR=
 endif
 
-if USE_MUSICBRAINZ
-MUSICBRAINZ_DIR=musicbrainz
-else
-MUSICBRAINZ_DIR=
-endif
-
 if USE_MYTHTV
 MYTHTV_DIR=mythtv
 else
@@ -294,6 +288,12 @@ else
 SDL_DIR=
 endif
 
+if USE_SMOOTHSTREAMING
+SMOOTHSTREAMING_DIR = smoothstreaming
+else
+SMOOTHSTREAMING_DIR =
+endif
+
 # if USE_SMOOTHWAVE
 # SMOOTHWAVE_DIR=smoothwave
 # else
@@ -378,6 +378,11 @@ else
 HLS_DIR =
 endif
 
+if USE_WEBP
+WEBP_DIR=webp
+else
+WEBP_DIR=
+endif
 
 SUBDIRS=\
 	$(VOAACENC_DIR) \
@@ -387,13 +392,13 @@ SUBDIRS=\
 	$(AUDIOFILE_DIR) \
 	$(BZ2_DIR) \
 	$(CDAUDIO_DIR) \
-	$(CELT_DIR) \
 	$(CHROMAPRINT_DIR) \
 	$(CURL_DIR) \
+	$(DASH_DIR) \
 	$(DC1394_DIR) \
-	$(DIRAC_DIR) \
 	$(DIRECTFB_DIR) \
 	$(WAYLAND_DIR) \
+	$(DAALA_DIR) \
 	$(DTS_DIR) \
 	$(RESINDVD_DIR) \
 	$(EGLGLES_DIR) \
@@ -415,7 +420,6 @@ SUBDIRS=\
 	$(MIMIC_DIR) \
 	$(MPLEX_DIR) \
 	$(MUSEPACK_DIR) \
-	$(MUSICBRAINZ_DIR) \
 	$(MYTHTV_DIR) \
 	$(NAS_DIR) \
 	$(NEON_DIR) \
@@ -429,6 +433,7 @@ SUBDIRS=\
 	$(SBC_DIR) \
 	$(SCHRO_DIR) \
 	$(SDL_DIR) \
+	$(SMOOTHSTREAMING_DIR) \
 	$(SMOOTHWAVE_DIR) \
 	$(SNDFILE_DIR) \
 	$(SNDIO_DIR) \
@@ -442,18 +447,18 @@ SUBDIRS=\
 	$(XVID_DIR) \
 	$(ZBAR_DIR) \
 	$(RTMP_DIR) \
-	$(HLS_DIR)
+	$(HLS_DIR) \
+	$(WEBP_DIR)
 
 DIST_SUBDIRS = \
 	assrender \
 	apexsink \
 	bz2 \
 	cdaudio \
-	celt \
 	chromaprint \
 	curl \
+	dash \
 	dc1394 \
-	dirac \
 	directfb \
 	wayland \
 	faac \
@@ -467,6 +472,7 @@ DIST_SUBDIRS = \
 	kate \
 	libmms \
 	lv2 \
+	daala \
 	dts \
 	eglgles \
 	modplug \
@@ -475,7 +481,6 @@ DIST_SUBDIRS = \
 	mpg123 \
 	mplex \
 	musepack \
-	musicbrainz \
 	mythtv \
 	nas \
 	neon \
@@ -490,6 +495,7 @@ DIST_SUBDIRS = \
 	sbc \
 	schroedinger \
 	sdl \
+	smoothstreaming \
 	sndfile \
 	sndio \
 	soundtouch \
@@ -503,6 +509,7 @@ DIST_SUBDIRS = \
 	voamrwbenc \
 	xvid \
 	zbar \
-	rtmp
+	rtmp \
+	webp
 
 include $(top_srcdir)/common/parallel-subdirs.mak

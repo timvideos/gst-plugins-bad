@@ -101,6 +101,7 @@ static gboolean
 gst_pes_filter_is_sync (guint32 sync)
 {
   return ((sync & 0xfffffffc) == 0x000001bc) ||
+      ((sync & 0xfffffffd) == 0x000001bd) ||
       ((sync & 0xffffffe0) == 0x000001c0) ||
       ((sync & 0xfffffff0) == 0x000001f0) ||
       ((sync & 0xfffffff0) == 0x000001e0);
@@ -458,9 +459,11 @@ gst_pes_filter_parse (GstPESFilter * filter)
 push_out:
   {
     GstBuffer *out;
+#ifndef GST_DISABLE_GST_DEBUG
     guint16 consumed;
 
     consumed = avail - 6 - datalen;
+#endif
 
     if (filter->unbounded_packet == FALSE) {
       filter->length -= avail - 6;

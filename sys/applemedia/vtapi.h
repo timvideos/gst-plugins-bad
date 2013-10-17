@@ -20,7 +20,8 @@
 #ifndef __GST_VT_API_H__
 #define __GST_VT_API_H__
 
-#include "cmapi.h"
+#include "dynapi.h"
+#include "CoreMedia/CoreMedia.h"
 
 G_BEGIN_DECLS
 
@@ -28,6 +29,8 @@ typedef struct _GstVTApi GstVTApi;
 typedef struct _GstVTApiClass GstVTApiClass;
 
 typedef enum _VTStatus VTStatus;
+typedef enum _VTDecodeFrameFlags VTDecodeFrameFlags;
+typedef enum _VTDecodeInfoFlags VTDecodeInfoFlags;
 
 typedef guint32 VTFormatId;
 
@@ -38,8 +41,9 @@ typedef struct _VTDecompressionOutputCallback VTDecompressionOutputCallback;
 
 typedef VTStatus (* VTCompressionOutputCallbackFunc) (void * data, int a2,
     int a3, int a4, CMSampleBufferRef sbuf, int a6, int a7);
-typedef void (* VTDecompressionOutputCallbackFunc) (void * data, gsize unk1,
-    VTStatus result, gsize unk2, CVBufferRef cvbuf);
+typedef void (* VTDecompressionOutputCallbackFunc) (void *data1, void *data2,
+    VTStatus result, VTDecodeInfoFlags info, CVBufferRef cvbuf,
+    CMTime pts, CMTime dts);
 
 enum _VTStatus
 {
@@ -49,7 +53,25 @@ enum _VTStatus
 enum _VTFormat
 {
   kVTFormatH264 = 'avc1',
+  kVTFormatMPEG2 = 'mp2v',
   kVTFormatJPEG = 'jpeg'
+};
+
+enum _VTDecodeFrameFlags
+{
+  kVTDecodeFrame_EnableAsynchronousDecompression = 1<<0,
+  kVTDecodeFrame_DoNotOutputFrame = 1<<1,
+  /* low-power mode that can not decode faster than 1x realtime. */
+  kVTDecodeFrame_1xRealTimePlayback = 1<<2,
+  /* Output frame in PTS order.
+   * Needs to call VTDecompressionSessionFinishDelayedFrames to dequeue */
+  kVTDecodeFrame_EnableTemporalProcessing = 1<<3,
+};
+
+enum _VTDecodeInfoFlags
+{
+  kVTDecodeInfo_Asynchronous = 1UL << 0,
+  kVTDecodeInfo_FrameDropped = 1UL << 1,
 };
 
 struct _VTCompressionOutputCallback
@@ -99,11 +121,14 @@ struct _GstVTApi
       VTDecompressionOutputCallback * outputCallback,
       VTDecompressionSessionRef * session);
   VTStatus (* VTDecompressionSessionDecodeFrame)
-      (VTDecompressionSessionRef session, CMSampleBufferRef sbuf, gsize unk1,
-      gsize unk2, gsize unk3);
+      (VTDecompressionSessionRef session, CMSampleBufferRef sbuf,
+       VTDecodeFrameFlags decode_flags, void *src_buf,
+       VTDecodeInfoFlags *info_flags);
   void (* VTDecompressionSessionInvalidate)
       (VTDecompressionSessionRef session);
   VTStatus (* VTDecompressionSessionWaitForAsynchronousFrames)
+      (VTDecompressionSessionRef session);
+  VTStatus (* VTDecompressionSessionFinishDelayedFrames)
       (VTDecompressionSessionRef session);
 
   CFStringRef * kVTCompressionPropertyKey_AllowTemporalCompression;

@@ -14,9 +14,9 @@ TESTS_ENVIRONMENT = \
 	GST_PLUGIN_SYSTEM_PATH_1_0=				\
 	GST_PLUGIN_PATH_1_0=$(top_builddir)/gst:$(top_builddir)/sys:$(top_builddir)/ext:$(GST_PLUGINS_LIBAV_DIR):$(GST_PLUGINS_UGLY_DIR):$(GST_PLUGINS_GOOD_DIR):$(GST_PLUGINS_BASE_DIR):$(GST_PLUGINS_DIR) \
 	GST_PLUGIN_LOADING_WHITELIST="gstreamer@$(GST_PLUGINS_DIR):gst-plugins-base@$(GSTPB_PLUGINS_DIR):gst-plugins-good:gst-plugins-ugly:gst-libav:gst-plugins-bad@$(top_builddir)" \
-	GST_STATE_IGNORE_ELEMENTS="apexsink camerabin cdaudio dc1394src \
+	GST_STATE_IGNORE_ELEMENTS="apexsink avdtpsrc camerabin cdaudio dc1394src \
 	    dccpclientsrc dccpclientsink dccpserversrc dccpserversink decklinksrc \
-	    decklinksink dvbsrc dvbbasebin dfbvideosink festival gsettingsvideosrc \
+	    decklinksink dvbsrc dvbbasebin dfbvideosink festival fluidsynth gsettingsvideosrc \
 	    gsettingsvideosink gsettingsaudiosrc gsettingsaudiosink linsyssdisrc linsyssdisink nassink \
 	    rsndvdbin sdlaudiosink sdlvideosink vcdsrc rfbsrc vdpauyuvvideo vdpauvideoyuv \
 	    vdpaumpegdec vdpaumpeg4dec vdpauh264dec vdpauvideopostprocess vdpausink neonhttpsrc"
@@ -31,7 +31,8 @@ CLEANFILES = core.* test-registry.*
 
 SUPPRESSIONS = $(top_srcdir)/common/gst.supp $(srcdir)/gst-plugins-bad.supp
 
-clean-local: clean-local-check clean-local-orc
+clean-local: clean-local-check
+distclean-local: distclean-local-orc
 
 if USE_ASSRENDER
 check_assrender = elements/assrender
@@ -201,6 +202,7 @@ check_PROGRAMS = \
 	$(check_opus)  \
 	$(check_curl) \
 	$(check_shm) \
+	elements/aiffparse \
 	elements/autoconvert \
 	elements/autovideoconvert \
 	elements/asfmux \
@@ -316,11 +318,9 @@ elements_voaacenc_LDADD = \
 	$(GST_PLUGINS_BASE_LIBS) $(GST_BASE_LIBS) $(GST_LIBS) $(LDADD) \
 	-lgstaudio-@GST_API_VERSION@
 
-elements_baseaudiovisualizer_SOURCES = elements/baseaudiovisualizer.c \
-	$(top_srcdir)/gst/audiovisualizers/gstaudiovisualizer.c \
-	$(top_srcdir)/gst/audiovisualizers/gstaudiovisualizer.h
+elements_baseaudiovisualizer_SOURCES = elements/baseaudiovisualizer.c
 elements_baseaudiovisualizer_CFLAGS = $(GST_PLUGINS_BAD_CFLAGS) \
-	-I$(top_srcdir)/gst/audiovisualizers $(GST_PLUGINS_BASE_CFLAGS) \
+	$(GST_PLUGINS_BASE_CFLAGS) \
 	$(GST_BASE_CFLAGS) $(GST_CONTROLLER_CFLAGS) $(GST_CFLAGS) $(AM_CFLAGS)
 elements_baseaudiovisualizer_LDADD = \
 	$(GST_PLUGINS_BASE_LIBS) -lgstaudio-@GST_API_VERSION@  \
@@ -380,6 +380,6 @@ orc/bayer.c: $(top_srcdir)/gst/bayer/gstbayerorc.orc
 	$(MKDIR_P) orc
 	$(ORCC) --test -o $@ $<
 
-clean-local-orc:
+distclean-local-orc:
 	rm -rf orc
 

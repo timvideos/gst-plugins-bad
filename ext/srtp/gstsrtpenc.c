@@ -118,8 +118,10 @@ GST_DEBUG_CATEGORY_STATIC (gst_srtp_enc_debug);
 #define DEFAULT_RTCP_AUTH       DEFAULT_RTP_AUTH
 #define DEFAULT_RANDOM_KEY      FALSE
 
-#define OBJECT_LOCK(arg)  {GST_DEBUG("Locking"); GST_OBJECT_LOCK(arg);}
-#define OBJECT_UNLOCK(arg)  {GST_DEBUG("Unlocking"); GST_OBJECT_UNLOCK(arg);}
+#define HAS_CRYPTO(filter) (filter->rtp_cipher != GST_SRTP_CIPHER_NULL || \
+      filter->rtcp_cipher != GST_SRTP_CIPHER_NULL ||                      \
+      filter->rtp_auth != GST_SRTP_AUTH_NULL ||                           \
+      filter->rtcp_auth != GST_SRTP_AUTH_NULL)
 
 /* Filter signals and args */
 enum
@@ -322,6 +324,7 @@ check_new_stream_locked (GstSrtpEnc * filter, guint32 ssrc)
   err_status_t ret;
   srtp_policy_t policy;
   GstMapInfo map;
+  guchar tmp[1];
 
   memset (&policy, 0, sizeof (srtp_policy_t));
 
@@ -329,11 +332,25 @@ check_new_stream_locked (GstSrtpEnc * filter, guint32 ssrc)
   if (g_hash_table_lookup (filter->ssrcs_set, GUINT_TO_POINTER (ssrc)))
     return TRUE;
 
-  if (gst_buffer_get_size (filter->key) != SRTP_MASTER_KEY_LEN) {
-    GST_ELEMENT_ERROR (filter, LIBRARY, SETTINGS, ("Master key size is wrong"),
-        ("Expected master key of %d bytes, but received %" G_GSIZE_FORMAT
-            " bytes", SRTP_MASTER_KEY_LEN, gst_buffer_get_size (filter->key)));
-    return FALSE;
+  GST_OBJECT_LOCK (filter);
+
+  if (HAS_CRYPTO (filter)) {
+    if (filter->key == NULL) {
+      GST_OBJECT_UNLOCK (filter);
+      GST_ELEMENT_ERROR (filter, LIBRARY, SETTINGS,
+          ("Cipher is not NULL, key must be set"),
+          ("Cipher is not NULL, key must be set"));
+      return FALSE;
+    }
+    if (gst_buffer_get_size (filter->key) != SRTP_MASTER_KEY_LEN) {
+      GST_OBJECT_UNLOCK (filter);
+      GST_ELEMENT_ERROR (filter, LIBRARY, SETTINGS,
+          ("Master key size is wrong"),
+          ("Expected master key of %d bytes, but received %" G_GSIZE_FORMAT
+              " bytes", SRTP_MASTER_KEY_LEN,
+              gst_buffer_get_size (filter->key)));
+      return FALSE;
+    }
   }
 
   GST_DEBUG_OBJECT (filter, "Setting RTP/RTCP policy to %d / %d",
@@ -343,11 +360,15 @@ check_new_stream_locked (GstSrtpEnc * filter, guint32 ssrc)
   set_crypto_policy_cipher_auth (filter->rtcp_cipher, filter->rtcp_auth,
       &policy.rtcp);
 
-  gst_buffer_map (filter->key, &map, GST_MAP_READ);
+  if (HAS_CRYPTO (filter)) {
+    gst_buffer_map (filter->key, &map, GST_MAP_READ);
+    policy.key = (guchar *) map.data;
+  } else {
+    policy.key = tmp;
+  }
 
   policy.ssrc.value = ssrc;
   policy.ssrc.type = ssrc_specific;
-  policy.key = (guchar *) map.data;
   policy.next = NULL;
 
   /* If it is the first stream, create the session
@@ -358,10 +379,13 @@ check_new_stream_locked (GstSrtpEnc * filter, guint32 ssrc)
   else
     ret = srtp_add_stream (filter->session, &policy);
 
-  gst_buffer_unmap (filter->key, &map);
+  if (HAS_CRYPTO (filter))
+    gst_buffer_unmap (filter->key, &map);
 
   g_hash_table_insert (filter->ssrcs_set, GUINT_TO_POINTER (ssrc),
       GUINT_TO_POINTER (1));
+
+  GST_OBJECT_UNLOCK (filter);
 
   return ret == err_status_ok;
 }
@@ -690,8 +714,11 @@ gst_srtp_enc_sink_setcaps (GstPad * pad, GstSrtpEnc * filter,
 
   GST_OBJECT_LOCK (filter);
 
+  if (HAS_CRYPTO (filter))
+    gst_structure_set (ps, "srtp-key", GST_TYPE_BUFFER, filter->key, NULL);
+
   /* Add srtp-specific params to source caps */
-  gst_structure_set (ps, "srtp-key", GST_TYPE_BUFFER, filter->key,
+  gst_structure_set (ps,
       "srtp-cipher", G_TYPE_STRING,
       enum_nick_from_value (GST_TYPE_SRTP_CIPHER_TYPE, filter->rtp_cipher),
       "srtp-auth", G_TYPE_STRING,
@@ -911,8 +938,6 @@ gst_srtp_enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf,
 
   GST_OBJECT_LOCK (filter);
 
-  size_max = gst_buffer_get_size (buf) + SRTP_MAX_TRAILER_LEN + 10;
-
   /* Update source caps if asked */
   if (do_setcaps) {
     GstCaps *caps;
@@ -929,7 +954,15 @@ gst_srtp_enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf,
     GST_OBJECT_LOCK (filter);
   }
 
+  if (!HAS_CRYPTO (filter)) {
+    GST_OBJECT_UNLOCK (filter);
+    otherpad = get_rtp_other_pad (pad);
+    return gst_pad_push (otherpad, buf);
+  }
+
+
   /* Create a bigger buffer to add protection */
+  size_max = gst_buffer_get_size (buf) + SRTP_MAX_TRAILER_LEN + 10;
   bufout = gst_buffer_new_allocate (NULL, size_max, NULL);
 
   gst_buffer_map (buf, &mapin, GST_MAP_READ);
@@ -1025,12 +1058,17 @@ gst_srtp_enc_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
-      if (!filter->key) {
-        if (filter->random_key) {
-          gst_srtp_enc_replace_random_key (filter);
-        } else {
-          GST_ERROR_OBJECT (element, "Need a key to get to READY");
-          return GST_STATE_CHANGE_FAILURE;
+      if (filter->rtp_cipher != GST_SRTP_CIPHER_NULL ||
+          filter->rtcp_cipher != GST_SRTP_CIPHER_NULL ||
+          filter->rtp_auth != GST_SRTP_AUTH_NULL ||
+          filter->rtcp_auth != GST_SRTP_AUTH_NULL) {
+        if (!filter->key) {
+          if (filter->random_key) {
+            gst_srtp_enc_replace_random_key (filter);
+          } else {
+            GST_ERROR_OBJECT (element, "Need a key to get to READY");
+            return GST_STATE_CHANGE_FAILURE;
+          }
         }
       }
       if ((filter->rtcp_cipher != NULL_CIPHER)

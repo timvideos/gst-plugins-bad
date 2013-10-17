@@ -93,6 +93,14 @@
 GST_DEBUG_CATEGORY (h264_parser_debug);
 #define GST_CAT_DEFAULT h264_parser_debug
 
+static gboolean initialized = FALSE;
+#define INITIALIZE_DEBUG_CATEGORY \
+  if (!initialized) { \
+    GST_DEBUG_CATEGORY_INIT (h264_parser_debug, "codecparsers_h264", 0, \
+        "h264 parser library"); \
+    initialized = TRUE; \
+  }
+
 /**** Default scaling_lists according to Table 7-2 *****/
 static const guint8 default_4x4_intra[16] = {
   6, 13, 13, 20, 20, 20, 28, 28, 28, 28, 32, 32,
@@ -688,18 +696,15 @@ gst_h264_parser_parse_scaling_list (NalReader * nr,
       READ_UINT8 (nr, scaling_list_present_flag, 1);
       if (scaling_list_present_flag) {
         guint8 *scaling_list;
-        const guint8 *scan;
         guint size;
         guint j;
         guint8 last_scale, next_scale;
 
         if (i < 6) {
           scaling_list = scaling_lists_4x4[i];
-          scan = zigzag_4x4;
           size = 16;
         } else {
           scaling_list = scaling_lists_8x8[i - 6];
-          scan = zigzag_8x8;
           size = 64;
         }
 
@@ -716,7 +721,7 @@ gst_h264_parser_parse_scaling_list (NalReader * nr,
             use_default = TRUE;
             break;
           }
-          last_scale = scaling_list[scan[j]] =
+          last_scale = scaling_list[j] =
               (next_scale == 0) ? last_scale : next_scale;
         }
       } else
@@ -984,7 +989,7 @@ error:
   return FALSE;
 }
 
-static gboolean
+static GstH264ParserResult
 gst_h264_parser_parse_buffering_period (GstH264NalParser * nalparser,
     GstH264BufferingPeriod * per, NalReader * nr)
 {
@@ -1096,7 +1101,7 @@ error:
   return FALSE;
 }
 
-static gboolean
+static GstH264ParserResult
 gst_h264_parser_parse_pic_timing (GstH264NalParser * nalparser,
     GstH264PicTiming * tim, NalReader * nr)
 {
@@ -1171,8 +1176,7 @@ gst_h264_nal_parser_new (void)
   GstH264NalParser *nalparser;
 
   nalparser = g_slice_new0 (GstH264NalParser);
-  GST_DEBUG_CATEGORY_INIT (h264_parser_debug, "codecparsers_h264", 0,
-      "h264 parser library");
+  INITIALIZE_DEBUG_CATEGORY;
 
   return nalparser;
 }
@@ -1430,11 +1434,11 @@ gst_h264_parse_sps (GstH264NalUnit * nalu, GstH264SPS * sps,
 {
   NalReader nr;
   gint width, height;
-  guint8 frame_cropping_flag;
   guint subwc[] = { 1, 2, 2, 1 };
   guint subhc[] = { 1, 2, 1, 1 };
   GstH264VUIParams *vui = NULL;
 
+  INITIALIZE_DEBUG_CATEGORY;
   GST_DEBUG ("parsing SPS");
   nal_reader_init (&nr, nalu->data + nalu->offset + 1, nalu->size - 1);
 
@@ -1522,8 +1526,8 @@ gst_h264_parse_sps (GstH264NalUnit * nalu, GstH264SPS * sps,
     READ_UINT8 (&nr, sps->mb_adaptive_frame_field_flag, 1);
 
   READ_UINT8 (&nr, sps->direct_8x8_inference_flag, 1);
-  READ_UINT8 (&nr, frame_cropping_flag, 1);
-  if (frame_cropping_flag) {
+  READ_UINT8 (&nr, sps->frame_cropping_flag, 1);
+  if (sps->frame_cropping_flag) {
     READ_UE (&nr, sps->frame_crop_left_offset);
     READ_UE (&nr, sps->frame_crop_right_offset);
     READ_UE (&nr, sps->frame_crop_top_offset);
@@ -1549,19 +1553,32 @@ gst_h264_parse_sps (GstH264NalUnit * nalu, GstH264SPS * sps,
   height = (sps->pic_height_in_map_units_minus1 + 1);
   height *= 16 * (2 - sps->frame_mbs_only_flag);
   GST_LOG ("initial width=%d, height=%d", width, height);
-
-  width -= (sps->frame_crop_left_offset + sps->frame_crop_right_offset)
-      * subwc[sps->chroma_format_idc];
-  height -= (sps->frame_crop_top_offset + sps->frame_crop_bottom_offset
-      * subhc[sps->chroma_format_idc] * (2 - sps->frame_mbs_only_flag));
   if (width < 0 || height < 0) {
     GST_WARNING ("invalid width/height in SPS");
     goto error;
   }
-  GST_LOG ("final width=%u, height=%u", width, height);
+
   sps->width = width;
   sps->height = height;
 
+  if (sps->frame_cropping_flag) {
+    const guint crop_unit_x = subwc[sps->chroma_format_idc];
+    const guint crop_unit_y =
+        subhc[sps->chroma_format_idc] * (2 - sps->frame_mbs_only_flag);
+
+    width -= (sps->frame_crop_left_offset + sps->frame_crop_right_offset)
+        * crop_unit_x;
+    height -= (sps->frame_crop_top_offset + sps->frame_crop_bottom_offset)
+        * crop_unit_y;
+
+    sps->crop_rect_width = width;
+    sps->crop_rect_height = height;
+    sps->crop_rect_x = sps->frame_crop_left_offset * crop_unit_x;
+    sps->crop_rect_y = sps->frame_crop_top_offset * crop_unit_y;
+
+    GST_LOG ("crop_rectangle x=%u y=%u width=%u, height=%u", sps->crop_rect_x,
+        sps->crop_rect_y, width, height);
+  }
   sps->fps_num = 0;
   sps->fps_den = 1;
 
@@ -1614,6 +1631,7 @@ gst_h264_parse_pps (GstH264NalParser * nalparser, GstH264NalUnit * nalu,
   guint8 pic_scaling_matrix_present_flag;
   gint qp_bd_offset;
 
+  INITIALIZE_DEBUG_CATEGORY;
   GST_DEBUG ("parsing PPS");
 
   nal_reader_init (&nr, nalu->data + nalu->offset + 1, nalu->size - 1);
@@ -1947,8 +1965,10 @@ gst_h264_parser_parse_sei (GstH264NalParser * nalparser, GstH264NalUnit * nalu,
 
   guint32 payloadSize;
   guint8 payload_type_byte, payload_size_byte;
+#ifndef GST_DISABLE_GST_DEBUG
   guint remaining, payload_size;
-  gboolean res;
+#endif
+  GstH264ParserResult res;
 
   GST_DEBUG ("parsing \"Sei message\"");
 
@@ -1970,11 +1990,13 @@ gst_h264_parser_parse_sei (GstH264NalParser * nalparser, GstH264NalUnit * nalu,
   }
   while (payload_size_byte == 0xff);
 
+#ifndef GST_DISABLE_GST_DEBUG
   remaining = nal_reader_get_remaining (&nr) * 8;
   payload_size = payloadSize < remaining ? payloadSize : remaining;
 
   GST_DEBUG ("SEI message received: payloadType  %u, payloadSize = %u bytes",
       sei->payloadType, payload_size);
+#endif
 
   if (sei->payloadType == GST_H264_SEI_BUF_PERIOD) {
     /* size not set; might depend on emulation_prevention_three_byte */
@@ -1992,4 +2014,104 @@ gst_h264_parser_parse_sei (GstH264NalParser * nalparser, GstH264NalUnit * nalu,
 error:
   GST_WARNING ("error parsing \"Sei message\"");
   return GST_H264_PARSER_ERROR;
+}
+
+/**
+ * gst_h264_video_quant_matrix_8x8_get_zigzag_from_raster:
+ * @out_quant: (out): The resulting quantization matrix
+ * @quant: The source quantization matrix
+ *
+ * Converts quantization matrix @quant from raster scan order to
+ * zigzag scan order and store the resulting factors into @out_quant.
+ *
+ * Note: it is an error to pass the same table in both @quant and
+ * @out_quant arguments.
+ *
+ * Since: 1.4
+ */
+void
+gst_h264_video_quant_matrix_8x8_get_zigzag_from_raster (guint8 out_quant[64],
+    const guint8 quant[64])
+{
+  guint i;
+
+  g_return_if_fail (out_quant != quant);
+
+  for (i = 0; i < 64; i++)
+    out_quant[i] = quant[zigzag_8x8[i]];
+}
+
+/**
+ * gst_h264_quant_matrix_8x8_get_raster_from_zigzag:
+ * @out_quant: (out): The resulting quantization matrix
+ * @quant: The source quantization matrix
+ *
+ * Converts quantization matrix @quant from zigzag scan order to
+ * raster scan order and store the resulting factors into @out_quant.
+ *
+ * Note: it is an error to pass the same table in both @quant and
+ * @out_quant arguments.
+ *
+ * Since: 1.4
+ */
+void
+gst_h264_video_quant_matrix_8x8_get_raster_from_zigzag (guint8 out_quant[64],
+    const guint8 quant[64])
+{
+  guint i;
+
+  g_return_if_fail (out_quant != quant);
+
+  for (i = 0; i < 64; i++)
+    out_quant[zigzag_8x8[i]] = quant[i];
+}
+
+/**
+ * gst_h264_video_quant_matrix_4x4_get_zigzag_from_raster:
+ * @out_quant: (out): The resulting quantization matrix
+ * @quant: The source quantization matrix
+ *
+ * Converts quantization matrix @quant from raster scan order to
+ * zigzag scan order and store the resulting factors into @out_quant.
+ *
+ * Note: it is an error to pass the same table in both @quant and
+ * @out_quant arguments.
+ *
+ * Since: 1.4
+ */
+void
+gst_h264_video_quant_matrix_4x4_get_zigzag_from_raster (guint8 out_quant[16],
+    const guint8 quant[16])
+{
+  guint i;
+
+  g_return_if_fail (out_quant != quant);
+
+  for (i = 0; i < 16; i++)
+    out_quant[i] = quant[zigzag_4x4[i]];
+}
+
+/**
+ * gst_h264_quant_matrix_4x4_get_raster_from_zigzag:
+ * @out_quant: (out): The resulting quantization matrix
+ * @quant: The source quantization matrix
+ *
+ * Converts quantization matrix @quant from zigzag scan order to
+ * raster scan order and store the resulting factors into @out_quant.
+ *
+ * Note: it is an error to pass the same table in both @quant and
+ * @out_quant arguments.
+ *
+ * Since: 1.4
+ */
+void
+gst_h264_video_quant_matrix_4x4_get_raster_from_zigzag (guint8 out_quant[16],
+    const guint8 quant[16])
+{
+  guint i;
+
+  g_return_if_fail (out_quant != quant);
+
+  for (i = 0; i < 16; i++)
+    out_quant[zigzag_4x4[i]] = quant[i];
 }

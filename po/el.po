@@ -3,14 +3,15 @@
 #
 # Michael Kotsarinis <mk73628@gmail.com>, 2010.
 # Simos Xenitellis <simos.lists@googlemail.com>, 2010.
+# Savvas Radevic <vicedar@gmail.com>, 2012.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: gst-plugins-bad 0.10.18.2\n"
+"Project-Id-Version: gst-plugins-bad 0.10.21.2\n"
 "Report-Msgid-Bugs-To: http://bugzilla.gnome.org/\n"
-"POT-Creation-Date: 2012-06-07 16:21+0200\n"
-"PO-Revision-Date: 2010-09-02 12:32+0300\n"
-"Last-Translator: Simos Xenitellis <simos.lists@googlemail.com>\n"
+"POT-Creation-Date: 2013-09-24 14:34+0200\n"
+"PO-Revision-Date: 2012-05-05 19:17+0100\n"
+"Last-Translator: Savvas Radevic <vicedar@gmail.com>\n"
 "Language-Team: Greek <team@lists.gnome.gr>\n"
 "Language: el\n"
 "MIME-Version: 1.0\n"
@@ -32,10 +33,24 @@ msgid ""
 "Could not read DVD. This may be because the DVD is encrypted and a DVD "
 "decryption library is not installed."
 msgstr ""
+"Αδυναμία ανάγνωσης δίσκου DVD. Αυτό μπορεί να οφείλεται στο ότι το DVD είναι "
+"κρυπτογραφημένο και δεν έχει εγκατασταθεί μια βιβλιοθήκη αποκρυπτογράφησης "
+"DVD."
 
-#, fuzzy
 msgid "Could not read DVD."
-msgstr "Αδυναμία ανάγνωσης πληροφοριών τίτλου του DVD."
+msgstr "Αδυναμία ανάγνωσης δίσκου DVD."
+
+msgid "This file contains no playable streams."
+msgstr ""
+
+msgid "Couldn't get the Manifest's URI"
+msgstr ""
+
+msgid "Failed to get fragment URL."
+msgstr ""
+
+msgid "Couldn't download fragments"
+msgstr ""
 
 msgid "No file name specified for writing."
 msgstr "Δεν έχει καθορισθεί όνομα αρχείου για εγγραφή."
@@ -51,8 +66,39 @@ msgstr "Εσωτερικό σφάλμα ροής δεδομένων."
 msgid "Could not write to file \"%s\"."
 msgstr "Αδυναμία εγγραφής στο αρχείο \"%s\"."
 
+msgid "Could not establish connection to sndio"
+msgstr ""
+
+msgid "Failed to query sndio capabilities"
+msgstr ""
+
+#, fuzzy
+msgid "Could not configure sndio"
+msgstr "Αδυναμία ανοίγματος αρχείου \"%s\" για ανάγνωση."
+
+#, fuzzy
+msgid "Could not start sndio"
+msgstr "Αδυναμία ανάγνωσης δίσκου DVD."
+
 msgid "Internal data flow error."
 msgstr "Εσωτερικό σφάλμα ροής δεδομένων."
+
+msgid "Generated file has a larger preroll time than its streams duration"
+msgstr ""
+
+#, c-format
+msgid "Missing element '%s' - check your GStreamer installation."
+msgstr ""
+
+msgid "File location is set to NULL, please set it to a valid filename"
+msgstr ""
+
+msgid "Subpicture format was not configured before data flow"
+msgstr ""
+
+#, c-format
+msgid "Given file name \"%s\" can't be converted to local file name encoding."
+msgstr ""
 
 #, c-format
 msgid "Device \"%s\" does not exist."
@@ -69,3 +115,17 @@ msgstr "Αδυναμία λήψης ρυθμίσεων από τη συσκευ�
 #, c-format
 msgid "Could not open file \"%s\" for reading."
 msgstr "Αδυναμία ανοίγματος αρχείου \"%s\" για ανάγνωση."
+
+msgid "Couldn't find DVB channel configuration file"
+msgstr ""
+
+#, c-format
+msgid "Couldn't load DVB channel configuration file: %s"
+msgstr ""
+
+msgid "DVB channel configuration file doesn't contain any channels"
+msgstr ""
+
+#, c-format
+msgid "Couldn't find details for DVB channel %s"
+msgstr ""

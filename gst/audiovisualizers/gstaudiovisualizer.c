@@ -33,10 +33,6 @@
 #include "config.h"
 #endif
 
-/* FIXME 0.11: suppress warnings for deprecated API such as GStaticRecMutex
- * with newer GLib versions (>= 2.31.0) */
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-
 #include <string.h>
 
 #include <gst/video/video.h>
@@ -709,7 +705,9 @@ gst_audio_visualizer_sink_setcaps (GstAudioVisualizer * scope, GstCaps * caps)
   GST_DEBUG_OBJECT (scope, "audio: channels %d, rate %d",
       GST_AUDIO_INFO_CHANNELS (&info), GST_AUDIO_INFO_RATE (&info));
 
-  gst_pad_mark_reconfigure (scope->srcpad);
+  if (!gst_audio_visualizer_src_negotiate (scope)) {
+    goto not_negotiated;
+  }
 
   return TRUE;
 
@@ -717,6 +715,11 @@ gst_audio_visualizer_sink_setcaps (GstAudioVisualizer * scope, GstCaps * caps)
 wrong_caps:
   {
     GST_WARNING_OBJECT (scope, "could not parse caps");
+    return FALSE;
+  }
+not_negotiated:
+  {
+    GST_WARNING_OBJECT (scope, "failed to negotiate");
     return FALSE;
   }
 }
