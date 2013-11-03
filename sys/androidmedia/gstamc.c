@@ -2223,7 +2223,9 @@ gst_amc_avc_profile_from_string (const gchar * profile)
   g_return_val_if_fail (profile != NULL, -1);
 
   for (i = 0; i < G_N_ELEMENTS (avc_profile_mapping_table); i++) {
-    if (strcmp (avc_profile_mapping_table[i].str, profile) == 0)
+    if (strcmp (avc_profile_mapping_table[i].str, profile) == 0 ||
+        (avc_profile_mapping_table[i].alt_str &&
+            strcmp (avc_profile_mapping_table[i].alt_str, profile) == 0))
       return avc_profile_mapping_table[i].id;
   }
 
@@ -2773,8 +2775,10 @@ register_codecs (GstPlugin * plugin)
           codec_info->name);
 
       /* Give the Google software codec a secondary rank,
-       * everything else is likely a hardware codec */
-      if (g_str_has_prefix (codec_info->name, "OMX.google"))
+       * everything else is likely a hardware codec, except
+       * OMX.SEC.*.sw.dec (as seen in Galaxy S4) */
+      if (g_str_has_prefix (codec_info->name, "OMX.google") ||
+          g_str_has_suffix (codec_info->name, ".sw.dec"))
         rank = GST_RANK_SECONDARY;
       else
         rank = GST_RANK_PRIMARY;

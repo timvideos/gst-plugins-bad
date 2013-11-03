@@ -344,7 +344,7 @@ GST_PLUGINS_NONPORTED=" cdxaparse \
  sdi stereo tta \
  videomeasure videosignal vmnc \
  linsys vcd \
- apexsink cdaudio dc1394 \
+ apexsink dc1394 \
  gsettings \
  musepack nas sdl sndfile timidity \
  directdraw acm wininet \
@@ -1103,18 +1103,6 @@ AG_GST_CHECK_FEATURE(BZ2, [bz2 library], bz2, [
 #  AC_SUBST(CAIRO_LIBS)
 #])
 
-dnl *** cdaudio ***
-translit(dnm, m, l) AM_CONDITIONAL(USE_CDAUDIO, true)
-AG_GST_CHECK_FEATURE(CDAUDIO, [cdaudio], cdaudio, [
-  PKG_CHECK_MODULES(CDAUDIO, libcdaudio, [
-          HAVE_CDAUDIO="yes"
-  ], [
-          HAVE_CDAUDIO="no"
-  ])
-  AC_SUBST(CDAUDIO_CFLAGS)
-  AC_SUBST(CDAUDIO_LIBS)
-])
-
 dnl *** chromaprint ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_CHROMAPRINT, true)
 AG_GST_CHECK_FEATURE(CHROMAPRINT, [chromaprint], chromaprint, [
@@ -1140,7 +1128,16 @@ AG_GST_CHECK_FEATURE(CURL, [Curl plugin], curl, [
   ])
   AC_SUBST(CURL_CFLAGS)
   AC_SUBST(CURL_LIBS)
-])
+  PKG_CHECK_MODULES(SSH2, libssh2 >= 1.4.3, [
+    HAVE_SSH2="yes"
+    AC_DEFINE(HAVE_SSH2, 1, [Define if libssh2 is available])
+  ], [
+    HAVE_SSH2="no"
+  ])
+  AM_CONDITIONAL(USE_SSH2, test "x$HAVE_SSH2" = "xyes")
+  AC_SUBST(SSH2_CFLAGS)
+  AC_SUBST(SSH2_LIBS)
+],,,[AM_CONDITIONAL(USE_SSH2, false)])
 
 dnl **** DASH ****
 translit(dnm, m, l) AM_CONDITIONAL(USE_DASH, true)
@@ -2190,9 +2187,9 @@ AM_CONDITIONAL(USE_VOAMRWBENC, false)
 AM_CONDITIONAL(USE_VOAACENC, false)
 AM_CONDITIONAL(USE_APEXSINK, false)
 AM_CONDITIONAL(USE_BZ2, false)
-AM_CONDITIONAL(USE_CDAUDIO, false)
 AM_CONDITIONAL(USE_CHROMAPRINT, false)
 AM_CONDITIONAL(USE_CURL, false)
+AM_CONDITIONAL(USE_SSH2, false)
 AM_CONDITIONAL(USE_DASH, false)
 AM_CONDITIONAL(USE_DC1394, false)
 AM_CONDITIONAL(USE_DECKLINK, false)
@@ -2232,6 +2229,7 @@ AM_CONDITIONAL(USE_OPENJPEG, false)
 AM_CONDITIONAL(USE_OPUS, false)
 AM_CONDITIONAL(USE_PVR, false)
 AM_CONDITIONAL(USE_RSVG, false)
+AM_CONDITIONAL(USE_EGLGLES, false)
 AM_CONDITIONAL(USE_TIMIDITY, false)
 AM_CONDITIONAL(USE_WILDMIDI, false)
 AM_CONDITIONAL(USE_SDL, false)
@@ -2461,7 +2459,6 @@ ext/voaacenc/Makefile
 ext/assrender/Makefile
 ext/apexsink/Makefile
 ext/bz2/Makefile
-ext/cdaudio/Makefile
 ext/chromaprint/Makefile
 ext/curl/Makefile
 ext/dash/Makefile
