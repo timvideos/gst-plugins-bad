@@ -56,10 +56,14 @@ struct _GstEaglContext
   EAGLContext *eagl_context;
   GLuint framebuffer;
   GLuint color_renderbuffer;
+  GLuint depth_renderbuffer;
 
   UIView *window;
   UIView *used_window;
 };
+
+static gboolean
+gst_egl_adaptation_update_surface (GstEglAdaptationContext * ctx);
 
 void
 gst_egl_adaptation_init (GstEglAdaptationContext * ctx)
@@ -78,12 +82,6 @@ gst_egl_adaptation_init_display (GstEglAdaptationContext * ctx)
 {
   /* NOP - the display should be initialized by the application */
   return TRUE;
-}
-
-void
-gst_egl_adaptation_terminate_display (GstEglAdaptationContext * ctx)
-{
-  /* NOP */
 }
 
 void
@@ -125,11 +123,11 @@ gst_egl_adaptation_create_egl_context (GstEglAdaptationContext * ctx)
       return FALSE;
 
   /* EAGL needs the context to be set here to allow surface creation */
-  return gst_egl_adaptation_make_current (ctx, TRUE);
+  return gst_egl_adaptation_context_make_current (ctx, TRUE);
 }
 
 gboolean
-gst_egl_adaptation_make_current (GstEglAdaptationContext * ctx,
+gst_egl_adaptation_context_make_current (GstEglAdaptationContext * ctx,
     gboolean bind)
 {
   __block EAGLContext *ctx_to_set = nil;
@@ -179,8 +177,13 @@ gst_egl_adaptation_create_surface (GstEglAdaptationContext * ctx)
   __block CAEAGLLayer *eaglLayer = (CAEAGLLayer *)[ctx->eaglctx->window layer];
 
   dispatch_sync(dispatch_get_main_queue(), ^{
-    /* Allocate framebuffer */
-    glGenFramebuffers(1, &framebuffer);
+
+    if (ctx->eaglctx->framebuffer) {
+      framebuffer = ctx->eaglctx->framebuffer;
+    } else {
+      /* Allocate framebuffer */
+      glGenFramebuffers(1, &framebuffer);
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
  
     /* Allocate color render buffer */
@@ -212,13 +215,16 @@ gst_egl_adaptation_create_surface (GstEglAdaptationContext * ctx)
 
   ctx->eaglctx->framebuffer = framebuffer;
   ctx->eaglctx->color_renderbuffer = colorRenderbuffer;
+  ctx->eaglctx->depth_renderbuffer = colorRenderbuffer;
+  ctx->surface_width = width;
+  ctx->surface_height = height;
   glBindRenderbuffer(GL_RENDERBUFFER, ctx->eaglctx->color_renderbuffer);
 
   return TRUE;
 }
 
 gboolean
-gst_egl_choose_config (GstEglAdaptationContext * ctx, gboolean try_only, gint * num_configs)
+_gst_egl_choose_config (GstEglAdaptationContext * ctx, gboolean try_only, gint * num_configs)
 {
   CAEAGLLayer *eaglLayer = (CAEAGLLayer *)[ctx->eaglctx->window layer];
   NSDictionary *dict = [NSDictionary dictionaryWithObjectsAndKeys:
@@ -260,18 +266,18 @@ gboolean
 gst_egl_adaptation_update_surface_dimensions (GstEglAdaptationContext *
     ctx)
 {
-  GLint width;
-  GLint height;
+  CAEAGLLayer *layer = (CAEAGLLayer *)[ctx->eaglctx->window layer];
+  CGSize size = layer.frame.size;
 
-  /* Get renderbuffer width/height */
-  glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &width);
-  glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &height);
-
-  if (width != ctx->surface_width || height != ctx->surface_height) {
-    ctx->surface_width = width;
-    ctx->surface_height = height;
-    GST_INFO_OBJECT (ctx->element, "Got surface of %dx%d pixels", width,
-        height);
+  if (size.width != ctx->surface_width || size.height != ctx->surface_height) {
+    ctx->surface_width = size.width;
+    ctx->surface_height = size.height;
+    GST_INFO_OBJECT (ctx->element, "Got surface of %dx%d pixels",
+        (gint) size.width, (gint) size.height);
+    if (!gst_egl_adaptation_update_surface (ctx)) {
+      GST_WARNING_OBJECT (ctx->element, "Failed to update surface "
+          "to new dimensions");
+    }
     return TRUE;
   }
 
@@ -279,7 +285,7 @@ gst_egl_adaptation_update_surface_dimensions (GstEglAdaptationContext *
 }
 
 void
-gst_egl_adaptation_init_egl_exts (GstEglAdaptationContext * ctx)
+gst_egl_adaptation_init_exts (GstEglAdaptationContext * ctx)
 {
   const gchar *extensions = (const gchar *) glGetString(GL_EXTENSIONS);
   NSString *extensionsString = NULL;
@@ -302,6 +308,23 @@ gst_egl_adaptation_destroy_surface (GstEglAdaptationContext * ctx)
   }
 }
 
+static gboolean
+gst_egl_adaptation_update_surface (GstEglAdaptationContext * ctx)
+{
+  glBindFramebuffer(GL_FRAMEBUFFER, ctx->eaglctx->framebuffer);
+
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                              GL_RENDERBUFFER, 0);
+  glDeleteRenderbuffers(1, &ctx->eaglctx->depth_renderbuffer);
+
+  glBindRenderbuffer (GL_RENDERBUFFER, 0);
+  glFramebufferRenderbuffer (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+      GL_RENDERBUFFER, 0);
+  glDeleteRenderbuffers(1, &ctx->eaglctx->color_renderbuffer);
+
+  return gst_egl_adaptation_create_surface (ctx);
+}
+
 void
 gst_egl_adaptation_destroy_context (GstEglAdaptationContext * ctx)
 {
@@ -313,7 +336,7 @@ gst_egl_adaptation_destroy_context (GstEglAdaptationContext * ctx)
 }
 
 gboolean
-gst_egl_adaptation_swap_buffers (GstEglAdaptationContext * ctx)
+gst_egl_adaptation_context_swap_buffers (GstEglAdaptationContext * ctx)
 {
   [ctx->eaglctx->eagl_context presentRenderbuffer:GL_RENDERBUFFER];
   return TRUE;
@@ -323,16 +346,4 @@ void
 gst_egl_adaptation_set_window (GstEglAdaptationContext * ctx, guintptr window)
 {
   ctx->eaglctx->window = (UIView *) window;
-}
-
-void
-gst_egl_adaptation_update_used_window (GstEglAdaptationContext * ctx)
-{
-  ctx->eaglctx->used_window = ctx->eaglctx->window;
-}
-
-guintptr
-gst_egl_adaptation_get_window (GstEglAdaptationContext * ctx)
-{
-  return (guintptr) ctx->eaglctx->window;
 }

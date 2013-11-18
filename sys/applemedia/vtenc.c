@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010, 2013 Ole André Vadla Ravnås <oleavr@soundrop.com>
+ * Copyright (C) 2013 Intel Corporation
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -45,7 +46,7 @@ typedef struct _GstVTEncFrame GstVTEncFrame;
 struct _GstVTEncFrame
 {
   GstBuffer *buf;
-  GstMapInfo map;
+  GstVideoFrame videoframe;
 };
 
 static GstElementClass *parent_class = NULL;
@@ -94,8 +95,12 @@ static VTStatus gst_vtenc_enqueue_buffer (void *data, int a2, int a3, int a4,
 static gboolean gst_vtenc_buffer_is_keyframe (GstVTEnc * self,
     CMSampleBufferRef sbuf);
 
-static GstVTEncFrame *gst_vtenc_frame_new (GstBuffer * buf);
+static GstVTEncFrame *gst_vtenc_frame_new (GstBuffer * buf,
+    GstVideoInfo * videoinfo);
 static void gst_vtenc_frame_free (GstVTEncFrame * frame);
+
+static GstStaticCaps sink_caps =
+GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ NV12, I420 }"));
 
 static void
 gst_vtenc_base_init (GstVTEncClass * klass)
@@ -116,20 +121,13 @@ gst_vtenc_base_init (GstVTEncClass * klass)
 
   gst_element_class_set_metadata (element_class, longname,
       "Codec/Encoder/Video", description,
-      "Ole André Vadla Ravnås <oleavr@soundrop.com>");
+      "Ole André Vadla Ravnås <oleavr@soundrop.com>, Dominik Röttsches <dominik.rottsches@intel.com>");
 
   g_free (longname);
   g_free (description);
 
   sink_template = gst_pad_template_new ("sink",
-      GST_PAD_SINK,
-      GST_PAD_ALWAYS,
-      gst_caps_new_simple ("video/x-raw",
-          "format", G_TYPE_STRING, "NV12",
-          "width", GST_TYPE_INT_RANGE, min_width, max_width,
-          "height", GST_TYPE_INT_RANGE, min_height, max_height,
-          "framerate", GST_TYPE_FRACTION_RANGE,
-          min_fps_n, min_fps_d, max_fps_n, max_fps_d, NULL));
+      GST_PAD_SINK, GST_PAD_ALWAYS, gst_static_caps_get (&sink_caps));
   gst_element_class_add_pad_template (element_class, sink_template);
 
   src_caps = gst_caps_new_simple (codec_details->mimetype,
@@ -197,6 +195,8 @@ gst_vtenc_init (GstVTEnc * self)
   /* These could be controlled by properties later */
   self->dump_properties = FALSE;
   self->dump_attributes = FALSE;
+
+  self->session = NULL;
 }
 
 static gint
@@ -295,8 +295,7 @@ gst_vtenc_change_state (GstElement * element, GstStateChange transition)
   GstStateChangeReturn ret;
 
   if (transition == GST_STATE_CHANGE_NULL_TO_READY) {
-    self->ctx = gst_core_media_ctx_new (GST_API_CORE_VIDEO | GST_API_CORE_MEDIA
-        | GST_API_VIDEO_TOOLBOX, &error);
+    self->ctx = gst_core_media_ctx_new (GST_API_VIDEO_TOOLBOX, &error);
     if (error != NULL)
       goto api_error;
 
@@ -378,6 +377,9 @@ gst_vtenc_sink_setcaps (GstVTEnc * self, GstCaps * caps)
   gst_structure_get_fraction (structure, "framerate",
       &self->negotiated_fps_n, &self->negotiated_fps_d);
 
+  if (!gst_video_info_from_caps (&self->video_info, caps))
+    return FALSE;
+
   gst_vtenc_destroy_session (self, &self->session);
 
   GST_OBJECT_UNLOCK (self);
@@ -409,7 +411,6 @@ static gboolean
 gst_vtenc_negotiate_downstream (GstVTEnc * self, CMSampleBufferRef sbuf)
 {
   gboolean result;
-  GstCMApi *cm = self->ctx->cm;
   GstCaps *caps;
   GstStructure *s;
 
@@ -437,9 +438,9 @@ gst_vtenc_negotiate_downstream (GstVTEnc * self, CMSampleBufferRef sbuf)
     gsize codec_data_size;
     GstBuffer *codec_data_buf;
 
-    fmt = cm->CMSampleBufferGetFormatDescription (sbuf);
-    atoms = cm->CMFormatDescriptionGetExtension (fmt,
-        *(cm->kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms));
+    fmt = CMSampleBufferGetFormatDescription (sbuf);
+    atoms = CMFormatDescriptionGetExtension (fmt,
+        kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms);
     avccKey = CFStringCreateWithCString (NULL, "avcC", kCFStringEncodingUTF8);
     avcc = CFDictionaryGetValue (atoms, avccKey);
     CFRelease (avccKey);
@@ -525,7 +526,6 @@ static VTCompressionSessionRef
 gst_vtenc_create_session (GstVTEnc * self)
 {
   VTCompressionSessionRef session = NULL;
-  GstCVApi *cv = self->ctx->cv;
   GstVTApi *vt = self->ctx->vt;
   CFMutableDictionaryRef pb_attrs;
   VTCompressionOutputCallback callback;
@@ -533,11 +533,9 @@ gst_vtenc_create_session (GstVTEnc * self)
 
   pb_attrs = CFDictionaryCreateMutable (NULL, 0, &kCFTypeDictionaryKeyCallBacks,
       &kCFTypeDictionaryValueCallBacks);
-  gst_vtutil_dict_set_i32 (pb_attrs, *(cv->kCVPixelBufferPixelFormatTypeKey),
-      kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
-  gst_vtutil_dict_set_i32 (pb_attrs, *(cv->kCVPixelBufferWidthKey),
+  gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferWidthKey,
       self->negotiated_width);
-  gst_vtutil_dict_set_i32 (pb_attrs, *(cv->kCVPixelBufferHeightKey),
+  gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferHeightKey,
       self->negotiated_height);
 
   callback.func = gst_vtenc_enqueue_buffer;
@@ -753,7 +751,6 @@ gst_vtenc_session_configure_property_double (GstVTEnc * self,
 static GstFlowReturn
 gst_vtenc_encode_frame (GstVTEnc * self, GstBuffer * buf)
 {
-  GstCVApi *cv = self->ctx->cv;
   GstVTApi *vt = self->ctx->vt;
   CMTime ts, duration;
   GstCoreMediaMeta *meta;
@@ -764,9 +761,8 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstBuffer * buf)
 
   self->cur_inbuf = buf;
 
-  ts = self->ctx->cm->CMTimeMake
-      (GST_TIME_AS_MSECONDS (GST_BUFFER_TIMESTAMP (buf)), 1000);
-  duration = self->ctx->cm->CMTimeMake
+  ts = CMTimeMake (GST_TIME_AS_MSECONDS (GST_BUFFER_TIMESTAMP (buf)), 1000);
+  duration = CMTimeMake
       (GST_TIME_AS_MSECONDS (GST_BUFFER_DURATION (buf)), 1000);
 
   meta = gst_buffer_get_core_media_meta (buf);
@@ -778,16 +774,57 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstBuffer * buf)
     GstVTEncFrame *frame;
     CVReturn cv_ret;
 
-    frame = gst_vtenc_frame_new (buf);
-    cv_ret = cv->CVPixelBufferCreateWithBytes (NULL,
-        self->negotiated_width, self->negotiated_height,
-        kCVPixelFormatType_422YpCbCr8Deprecated, frame->map.data,
-        self->negotiated_width * 2,
-        (CVPixelBufferReleaseBytesCallback) gst_vtenc_frame_free, frame,
-        NULL, &pbuf);
-    if (cv_ret != kCVReturnSuccess) {
-      gst_vtenc_frame_free (frame);
+    frame = gst_vtenc_frame_new (buf, &self->video_info);
+    if (!frame)
       goto cv_error;
+
+    {
+      const size_t num_planes = GST_VIDEO_FRAME_N_PLANES (&frame->videoframe);
+      void *plane_base_addresses[num_planes];
+      size_t plane_widths[num_planes];
+      size_t plane_heights[num_planes];
+      size_t plane_bytes_per_row[num_planes];
+      OSType pixel_format_type;
+      size_t i;
+
+      for (i = 0; i < num_planes; i++) {
+        plane_base_addresses[i] =
+            GST_VIDEO_FRAME_PLANE_DATA (&frame->videoframe, i);
+        plane_widths[i] = GST_VIDEO_FRAME_COMP_WIDTH (&frame->videoframe, i);
+        plane_heights[i] = GST_VIDEO_FRAME_COMP_HEIGHT (&frame->videoframe, i);
+        plane_bytes_per_row[i] =
+            GST_VIDEO_FRAME_COMP_STRIDE (&frame->videoframe, i);
+        plane_bytes_per_row[i] =
+            GST_VIDEO_FRAME_COMP_STRIDE (&frame->videoframe, i);
+      }
+
+      switch (GST_VIDEO_INFO_FORMAT (&self->video_info)) {
+        case GST_VIDEO_FORMAT_I420:
+          pixel_format_type = kCVPixelFormatType_420YpCbCr8Planar;
+          break;
+        case GST_VIDEO_FORMAT_NV12:
+          pixel_format_type = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+          break;
+        default:
+          goto cv_error;
+      }
+
+      cv_ret = CVPixelBufferCreateWithPlanarBytes (NULL,
+          self->negotiated_width, self->negotiated_height,
+          pixel_format_type,
+          NULL,
+          GST_VIDEO_FRAME_SIZE (&frame->videoframe),
+          num_planes,
+          plane_base_addresses,
+          plane_widths,
+          plane_heights,
+          plane_bytes_per_row,
+          (CVPixelBufferReleasePlanarBytesCallback) gst_vtenc_frame_free, frame,
+          NULL, &pbuf);
+      if (cv_ret != kCVReturnSuccess) {
+        gst_vtenc_frame_free (frame);
+        goto cv_error;
+      }
     }
   }
 
@@ -807,11 +844,11 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstBuffer * buf)
   }
 
   self->ctx->vt->VTCompressionSessionCompleteFrames (self->session,
-      *(self->ctx->cm->kCMTimeInvalid));
+      kCMTimeInvalid);
 
   GST_OBJECT_UNLOCK (self);
 
-  cv->CVPixelBufferRelease (pbuf);
+  CVPixelBufferRelease (pbuf);
   self->cur_inbuf = NULL;
   gst_buffer_unref (buf);
 
@@ -866,7 +903,7 @@ gst_vtenc_enqueue_buffer (void *data, int a2, int a3, int a4,
   }
   self->expect_keyframe = FALSE;
 
-  buf = gst_core_media_buffer_new (self->ctx, sbuf);
+  buf = gst_core_media_buffer_new (sbuf);
   gst_buffer_copy_into (buf, self->cur_inbuf, GST_BUFFER_COPY_TIMESTAMPS,
       0, -1);
   if (is_keyframe) {
@@ -888,15 +925,14 @@ gst_vtenc_buffer_is_keyframe (GstVTEnc * self, CMSampleBufferRef sbuf)
   gboolean result = FALSE;
   CFArrayRef attachments_for_sample;
 
-  attachments_for_sample =
-      self->ctx->cm->CMSampleBufferGetSampleAttachmentsArray (sbuf, 0);
+  attachments_for_sample = CMSampleBufferGetSampleAttachmentsArray (sbuf, 0);
   if (attachments_for_sample != NULL) {
     CFDictionaryRef attachments;
     CFBooleanRef depends_on_others;
 
     attachments = CFArrayGetValueAtIndex (attachments_for_sample, 0);
     depends_on_others = CFDictionaryGetValue (attachments,
-        *(self->ctx->cm->kCMSampleAttachmentKey_DependsOnOthers));
+        kCMSampleAttachmentKey_DependsOnOthers);
     result = (depends_on_others == kCFBooleanFalse);
   }
 
@@ -904,13 +940,17 @@ gst_vtenc_buffer_is_keyframe (GstVTEnc * self, CMSampleBufferRef sbuf)
 }
 
 static GstVTEncFrame *
-gst_vtenc_frame_new (GstBuffer * buf)
+gst_vtenc_frame_new (GstBuffer * buf, GstVideoInfo * video_info)
 {
   GstVTEncFrame *frame;
 
   frame = g_slice_new (GstVTEncFrame);
   frame->buf = gst_buffer_ref (buf);
-  gst_buffer_map (buf, &frame->map, GST_MAP_READ);
+  if (!gst_video_frame_map (&frame->videoframe, video_info, buf, GST_MAP_READ)) {
+    gst_buffer_unref (frame->buf);
+    g_slice_free (GstVTEncFrame, frame);
+    return NULL;
+  }
 
   return frame;
 }
@@ -918,7 +958,7 @@ gst_vtenc_frame_new (GstBuffer * buf)
 static void
 gst_vtenc_frame_free (GstVTEncFrame * frame)
 {
-  gst_buffer_unmap (frame->buf, &frame->map);
+  gst_video_frame_unmap (&frame->videoframe);
   gst_buffer_unref (frame->buf);
   g_slice_free (GstVTEncFrame, frame);
 }

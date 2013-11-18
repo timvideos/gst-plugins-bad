@@ -49,7 +49,7 @@ static GstStaticPadTemplate srctemplate = GST_STATIC_PAD_TEMPLATE ("src",
 #define HTTP_DEFAULT_HOST        "localhost"
 
 /* default properties */
-#define DEFAULT_LOCATION             "http://"HTTP_DEFAULT_HOST":"G_STRINGIFY(HTTP_DEFAULT_PORT)
+#define DEFAULT_LOCATION             "http://" HTTP_DEFAULT_HOST ":" G_STRINGIFY(HTTP_DEFAULT_PORT)
 #define DEFAULT_PROXY                ""
 #define DEFAULT_USER_AGENT           "GStreamer neonhttpsrc"
 #define DEFAULT_AUTOMATIC_REDIRECT   TRUE
@@ -57,6 +57,7 @@ static GstStaticPadTemplate srctemplate = GST_STATIC_PAD_TEMPLATE ("src",
 #define DEFAULT_NEON_HTTP_DEBUG      FALSE
 #define DEFAULT_CONNECT_TIMEOUT      0
 #define DEFAULT_READ_TIMEOUT         0
+#define DEFAULT_IRADIO_MODE          TRUE
 
 enum
 {
@@ -70,8 +71,9 @@ enum
   PROP_CONNECT_TIMEOUT,
   PROP_READ_TIMEOUT,
 #ifndef GST_DISABLE_GST_DEBUG
-  PROP_NEON_HTTP_DEBUG
+  PROP_NEON_HTTP_DEBUG,
 #endif
+  PROP_IRADIO_MODE
 };
 
 static void gst_neonhttp_src_uri_handler_init (gpointer g_iface,
@@ -82,8 +84,8 @@ static void gst_neonhttp_src_set_property (GObject * object, guint prop_id,
 static void gst_neonhttp_src_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-static GstFlowReturn gst_neonhttp_src_create (GstPushSrc * psrc,
-    GstBuffer ** outbuf);
+static GstFlowReturn gst_neonhttp_src_fill (GstPushSrc * psrc,
+    GstBuffer * outbuf);
 static gboolean gst_neonhttp_src_start (GstBaseSrc * bsrc);
 static gboolean gst_neonhttp_src_stop (GstBaseSrc * bsrc);
 static gboolean gst_neonhttp_src_get_size (GstBaseSrc * bsrc, guint64 * size);
@@ -95,7 +97,7 @@ static gboolean gst_neonhttp_src_query (GstBaseSrc * bsrc, GstQuery * query);
 static gboolean gst_neonhttp_src_set_proxy (GstNeonhttpSrc * src,
     const gchar * uri);
 static gboolean gst_neonhttp_src_set_location (GstNeonhttpSrc * src,
-    const gchar * uri);
+    const gchar * uri, GError ** err);
 static gint gst_neonhttp_src_send_request_and_redirect (GstNeonhttpSrc * src,
     ne_session ** ses, ne_request ** req, gint64 offset, gboolean do_redir);
 static gint gst_neonhttp_src_request_dispatch (GstNeonhttpSrc * src,
@@ -104,48 +106,21 @@ static void gst_neonhttp_src_close_session (GstNeonhttpSrc * src);
 static gchar *gst_neonhttp_src_unicodify (const gchar * str);
 static void oom_callback (void);
 
-static void
-_urihandler_init (GType type)
-{
-  static const GInterfaceInfo urihandler_info = {
-    gst_neonhttp_src_uri_handler_init,
-    NULL,
-    NULL
-  };
-
-  g_type_add_interface_static (type, GST_TYPE_URI_HANDLER, &urihandler_info);
-
-  GST_DEBUG_CATEGORY_INIT (neonhttpsrc_debug, "neonhttpsrc", 0,
-      "NEON HTTP src");
-}
-
-GST_BOILERPLATE_FULL (GstNeonhttpSrc, gst_neonhttp_src, GstPushSrc,
-    GST_TYPE_PUSH_SRC, _urihandler_init);
-
-static void
-gst_neonhttp_src_base_init (gpointer g_class)
-{
-  GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
-
-  gst_element_class_add_pad_template (element_class,
-      gst_static_pad_template_get (&srctemplate));
-
-  gst_element_class_set_static_metadata (element_class, "HTTP client source",
-      "Source/Network",
-      "Receive data as a client over the network via HTTP using NEON",
-      "Edgard Lima <edgard.lima@indt.org.br>, "
-      "Rosfran Borges <rosfran.borges@indt.org.br>, "
-      "Andre Moreira Magalhaes <andre.magalhaes@indt.org.br>");
-}
+#define parent_class gst_neonhttp_src_parent_class
+G_DEFINE_TYPE_WITH_CODE (GstNeonhttpSrc, gst_neonhttp_src, GST_TYPE_PUSH_SRC,
+    G_IMPLEMENT_INTERFACE (GST_TYPE_URI_HANDLER,
+        gst_neonhttp_src_uri_handler_init));
 
 static void
 gst_neonhttp_src_class_init (GstNeonhttpSrcClass * klass)
 {
   GObjectClass *gobject_class;
+  GstElementClass *element_class;
   GstBaseSrcClass *gstbasesrc_class;
   GstPushSrcClass *gstpushsrc_class;
 
   gobject_class = (GObjectClass *) klass;
+  element_class = (GstElementClass *) klass;
   gstbasesrc_class = (GstBaseSrcClass *) klass;
   gstpushsrc_class = (GstPushSrcClass *) klass;
 
@@ -172,13 +147,6 @@ gst_neonhttp_src_class_init (GstNeonhttpSrcClass * klass)
           "Value of the User-Agent HTTP request header field",
           "GStreamer neonhttpsrc", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  /**
-   * GstNeonhttpSrc:cookies
-   *
-   * HTTP request cookies
-   *
-   * Since: 0.10.20
-   */
   g_object_class_install_property (gobject_class, PROP_COOKIES,
       g_param_spec_boxed ("cookies", "Cookies", "HTTP request cookies",
           G_TYPE_STRV, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
@@ -196,26 +164,12 @@ gst_neonhttp_src_class_init (GstNeonhttpSrcClass * klass)
           DEFAULT_ACCEPT_SELF_SIGNED,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  /**
-   * GstNeonhttpSrc:connect-timeout
-   *
-   * After how many seconds to timeout a connect attempt (0 = default)
-   *
-   * Since: 0.10.20
-   */
   g_object_class_install_property (gobject_class, PROP_CONNECT_TIMEOUT,
       g_param_spec_uint ("connect-timeout", "connect-timeout",
           "Value in seconds to timeout a blocking connection (0 = default).", 0,
           3600, DEFAULT_CONNECT_TIMEOUT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  /**
-   * GstNeonhttpSrc:read-timeout
-   *
-   * After how many seconds to timeout a blocking read (0 = default)
-   *
-   * Since: 0.10.20
-   */
   g_object_class_install_property (gobject_class, PROP_READ_TIMEOUT,
       g_param_spec_uint ("read-timeout", "read-timeout",
           "Value in seconds to timeout a blocking read (0 = default).", 0,
@@ -230,6 +184,12 @@ gst_neonhttp_src_class_init (GstNeonhttpSrcClass * klass)
           DEFAULT_NEON_HTTP_DEBUG, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 #endif
 
+  g_object_class_install_property (gobject_class, PROP_IRADIO_MODE,
+      g_param_spec_boolean ("iradio-mode", "iradio-mode",
+          "Enable internet radio mode (ask server to send shoutcast/icecast "
+          "metadata interleaved with the actual stream data)",
+          DEFAULT_IRADIO_MODE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gstbasesrc_class->start = GST_DEBUG_FUNCPTR (gst_neonhttp_src_start);
   gstbasesrc_class->stop = GST_DEBUG_FUNCPTR (gst_neonhttp_src_stop);
   gstbasesrc_class->get_size = GST_DEBUG_FUNCPTR (gst_neonhttp_src_get_size);
@@ -238,26 +198,34 @@ gst_neonhttp_src_class_init (GstNeonhttpSrcClass * klass)
   gstbasesrc_class->do_seek = GST_DEBUG_FUNCPTR (gst_neonhttp_src_do_seek);
   gstbasesrc_class->query = GST_DEBUG_FUNCPTR (gst_neonhttp_src_query);
 
-  gstpushsrc_class->create = GST_DEBUG_FUNCPTR (gst_neonhttp_src_create);
+  gstpushsrc_class->fill = GST_DEBUG_FUNCPTR (gst_neonhttp_src_fill);
 
   GST_DEBUG_CATEGORY_INIT (neonhttpsrc_debug, "neonhttpsrc", 0,
       "NEON HTTP Client Source");
+
+  gst_element_class_add_pad_template (element_class,
+      gst_static_pad_template_get (&srctemplate));
+
+  gst_element_class_set_static_metadata (element_class, "HTTP client source",
+      "Source/Network",
+      "Receive data as a client over the network via HTTP using NEON",
+      "Edgard Lima <edgard.lima@indt.org.br>, "
+      "Rosfran Borges <rosfran.borges@indt.org.br>, "
+      "Andre Moreira Magalhaes <andre.magalhaes@indt.org.br>");
 }
 
 static void
-gst_neonhttp_src_init (GstNeonhttpSrc * src, GstNeonhttpSrcClass * g_class)
+gst_neonhttp_src_init (GstNeonhttpSrc * src)
 {
   const gchar *str;
 
   src->neon_http_debug = DEFAULT_NEON_HTTP_DEBUG;
-  src->iradio_name = NULL;
-  src->iradio_genre = NULL;
-  src->iradio_url = NULL;
   src->user_agent = g_strdup (DEFAULT_USER_AGENT);
   src->automatic_redirect = DEFAULT_AUTOMATIC_REDIRECT;
   src->accept_self_signed = DEFAULT_ACCEPT_SELF_SIGNED;
   src->connect_timeout = DEFAULT_CONNECT_TIMEOUT;
   src->read_timeout = DEFAULT_READ_TIMEOUT;
+  src->iradio_mode = DEFAULT_IRADIO_MODE;
 
   src->cookies = NULL;
   src->session = NULL;
@@ -265,11 +233,9 @@ gst_neonhttp_src_init (GstNeonhttpSrc * src, GstNeonhttpSrcClass * g_class)
   memset (&src->uri, 0, sizeof (src->uri));
   memset (&src->proxy, 0, sizeof (src->proxy));
   src->content_size = -1;
-  src->icy_caps = NULL;
-  src->icy_metaint = 0;
   src->seekable = TRUE;
 
-  gst_neonhttp_src_set_location (src, DEFAULT_LOCATION);
+  gst_neonhttp_src_set_location (src, DEFAULT_LOCATION, NULL);
 
   /* configure proxy */
   str = g_getenv ("http_proxy");
@@ -288,18 +254,10 @@ gst_neonhttp_src_dispose (GObject * gobject)
   ne_uri_free (&src->proxy);
 
   g_free (src->user_agent);
-  g_free (src->iradio_name);
-  g_free (src->iradio_genre);
-  g_free (src->iradio_url);
 
   if (src->cookies) {
     g_strfreev (src->cookies);
     src->cookies = NULL;
-  }
-
-  if (src->icy_caps) {
-    gst_caps_unref (src->icy_caps);
-    src->icy_caps = NULL;
   }
 
   if (src->request) {
@@ -356,7 +314,7 @@ gst_neonhttp_src_set_property (GObject * object, guint prop_id,
         GST_WARNING ("location property cannot be NULL");
         goto done;
       }
-      if (!gst_neonhttp_src_set_location (src, location)) {
+      if (!gst_neonhttp_src_set_location (src, location, NULL)) {
         GST_WARNING ("badly formated location");
         goto done;
       }
@@ -389,6 +347,9 @@ gst_neonhttp_src_set_property (GObject * object, guint prop_id,
       src->neon_http_debug = g_value_get_boolean (value);
       break;
 #endif
+    case PROP_IRADIO_MODE:
+      src->iradio_mode = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -457,6 +418,9 @@ gst_neonhttp_src_get_property (GObject * object, guint prop_id,
       g_value_set_boolean (value, neonhttpsrc->neon_http_debug);
       break;
 #endif
+    case PROP_IRADIO_MODE:
+      g_value_set_boolean (value, neonhttpsrc->iradio_mode);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -471,51 +435,38 @@ oom_callback (void)
 }
 
 static GstFlowReturn
-gst_neonhttp_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
+gst_neonhttp_src_fill (GstPushSrc * psrc, GstBuffer * outbuf)
 {
   GstNeonhttpSrc *src;
-  GstBaseSrc *basesrc;
-  GstFlowReturn ret;
   gint read;
 
   src = GST_NEONHTTP_SRC (psrc);
-  basesrc = GST_BASE_SRC_CAST (psrc);
 
   /* The caller should know the number of bytes and not read beyond EOS. */
   if (G_UNLIKELY (src->eos))
     goto eos;
 
-  /* Create the buffer. */
-  ret = gst_pad_alloc_buffer (GST_BASE_SRC_PAD (basesrc),
-      basesrc->segment.last_stop, basesrc->blocksize,
-      src->icy_caps ? src->icy_caps :
-      GST_PAD_CAPS (GST_BASE_SRC_PAD (basesrc)), outbuf);
-
-  if (G_UNLIKELY (ret != GST_FLOW_OK))
-    goto done;
-
-  read = gst_neonhttp_src_request_dispatch (src, *outbuf);
+  read = gst_neonhttp_src_request_dispatch (src, outbuf);
   if (G_UNLIKELY (read < 0))
     goto read_error;
 
-  GST_LOG_OBJECT (src, "returning %u bytes", GST_BUFFER_SIZE (*outbuf));
+  GST_LOG_OBJECT (src, "returning %" G_GSIZE_FORMAT " bytes, "
+      "offset %" G_GUINT64_FORMAT, gst_buffer_get_size (outbuf),
+      GST_BUFFER_OFFSET (outbuf));
 
-done:
-  return ret;
+  return GST_FLOW_OK;
 
   /* ERRORS */
 eos:
   {
     GST_DEBUG_OBJECT (src, "EOS reached");
-    return GST_FLOW_UNEXPECTED;
+    return GST_FLOW_EOS;
   }
 read_error:
   {
     GST_ELEMENT_ERROR (src, RESOURCE, READ,
         (NULL), ("Could not read any bytes (%i, %s)", read,
             ne_get_error (src->session)));
-    gst_buffer_unref (*outbuf);
-    *outbuf = NULL;
     return GST_FLOW_ERROR;
   }
 }
@@ -562,45 +513,58 @@ gst_neonhttp_src_start (GstBaseSrc * bsrc)
   if (TRUE) {
     /* Icecast stuff */
     const gchar *str_value;
-    gint gint_value;
+    GstTagList *tags;
+    gchar *iradio_name;
+    gchar *iradio_url;
+    gchar *iradio_genre;
+    gint icy_metaint;
+
+    tags = gst_tag_list_new_empty ();
 
     str_value = ne_get_response_header (src->request, "icy-metaint");
     if (str_value) {
-      if (sscanf (str_value, "%d", &gint_value) == 1) {
-        if (src->icy_caps) {
-          gst_caps_unref (src->icy_caps);
-          src->icy_caps = NULL;
-        }
-        src->icy_metaint = gint_value;
-        src->icy_caps = gst_caps_new_simple ("application/x-icy",
-            "metadata-interval", G_TYPE_INT, src->icy_metaint, NULL);
+      if (sscanf (str_value, "%d", &icy_metaint) == 1) {
+        GstCaps *icy_caps;
+
+        icy_caps = gst_caps_new_simple ("application/x-icy",
+            "metadata-interval", G_TYPE_INT, icy_metaint, NULL);
+        gst_base_src_set_caps (GST_BASE_SRC (src), icy_caps);
       }
     }
 
     /* FIXME: send tags with name, genre, url */
     str_value = ne_get_response_header (src->request, "icy-name");
     if (str_value) {
-      if (src->iradio_name) {
-        g_free (src->iradio_name);
-        src->iradio_name = NULL;
+      iradio_name = gst_neonhttp_src_unicodify (str_value);
+      if (iradio_name) {
+        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_ORGANIZATION,
+            iradio_name, NULL);
+        g_free (iradio_name);
       }
-      src->iradio_name = gst_neonhttp_src_unicodify (str_value);
     }
     str_value = ne_get_response_header (src->request, "icy-genre");
     if (str_value) {
-      if (src->iradio_genre) {
-        g_free (src->iradio_genre);
-        src->iradio_genre = NULL;
+      iradio_genre = gst_neonhttp_src_unicodify (str_value);
+      if (iradio_genre) {
+        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_GENRE,
+            iradio_genre, NULL);
+        g_free (iradio_genre);
       }
-      src->iradio_genre = gst_neonhttp_src_unicodify (str_value);
     }
     str_value = ne_get_response_header (src->request, "icy-url");
     if (str_value) {
-      if (src->iradio_url) {
-        g_free (src->iradio_url);
-        src->iradio_url = NULL;
+      iradio_url = gst_neonhttp_src_unicodify (str_value);
+      if (iradio_url) {
+        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_LOCATION,
+            iradio_url, NULL);
+        g_free (iradio_url);
       }
-      src->iradio_url = gst_neonhttp_src_unicodify (str_value);
+    }
+    if (!gst_tag_list_is_empty (tags)) {
+      GST_DEBUG_OBJECT (src, "pushing tag list %" GST_PTR_FORMAT, tags);
+      gst_pad_push_event (GST_BASE_SRC_PAD (src), gst_event_new_tag (tags));
+    } else {
+      gst_tag_list_unref (tags);
     }
   }
 
@@ -642,26 +606,6 @@ gst_neonhttp_src_stop (GstBaseSrc * bsrc)
   GstNeonhttpSrc *src;
 
   src = GST_NEONHTTP_SRC (bsrc);
-
-  if (src->iradio_name) {
-    g_free (src->iradio_name);
-    src->iradio_name = NULL;
-  }
-
-  if (src->iradio_genre) {
-    g_free (src->iradio_genre);
-    src->iradio_genre = NULL;
-  }
-
-  if (src->iradio_url) {
-    g_free (src->iradio_url);
-    src->iradio_url = NULL;
-  }
-
-  if (src->icy_caps) {
-    gst_caps_unref (src->icy_caps);
-    src->icy_caps = NULL;
-  }
 
   src->eos = FALSE;
   src->content_size = -1;
@@ -750,11 +694,26 @@ gst_neonhttp_src_query (GstBaseSrc * bsrc, GstQuery * query)
   if (!ret)
     ret = GST_BASE_SRC_CLASS (parent_class)->query (bsrc, query);
 
+  switch (GST_QUERY_TYPE (query)) {
+    case GST_QUERY_SCHEDULING:{
+      GstSchedulingFlags flags;
+      gint minsize, maxsize, align;
+
+      gst_query_parse_scheduling (query, &flags, &minsize, &maxsize, &align);
+      flags |= GST_SCHEDULING_FLAG_BANDWIDTH_LIMITED;
+      gst_query_set_scheduling (query, flags, minsize, maxsize, align);
+      break;
+    }
+    default:
+      break;
+  }
+
   return ret;
 }
 
 static gboolean
-gst_neonhttp_src_set_location (GstNeonhttpSrc * src, const gchar * uri)
+gst_neonhttp_src_set_location (GstNeonhttpSrc * src, const gchar * uri,
+    GError ** err)
 {
   ne_uri_free (&src->uri);
   if (src->location) {
@@ -914,7 +873,8 @@ gst_neonhttp_src_send_request_and_redirect (GstNeonhttpSrc * src,
       ne_add_request_header (request, "Cookies", *c);
     }
 
-    ne_add_request_header (request, "icy-metadata", "1");
+    if (src->iradio_mode)
+      ne_add_request_header (request, "icy-metadata", "1");
 
     if (offset > 0) {
       ne_print_request_header (request, "Range",
@@ -934,7 +894,7 @@ gst_neonhttp_src_send_request_and_redirect (GstNeonhttpSrc * src,
         redir = ne_get_response_header (request, "Location");
         if (redir != NULL) {
           ne_uri_free (&src->uri);
-          gst_neonhttp_src_set_location (src, redir);
+          gst_neonhttp_src_set_location (src, redir, NULL);
           GST_LOG_OBJECT (src, "Got HTTP Status Code %d", http_status);
           GST_LOG_OBJECT (src, "Using 'Location' header [%s]", src->uri.host);
         }
@@ -984,18 +944,24 @@ gst_neonhttp_src_send_request_and_redirect (GstNeonhttpSrc * src,
 static gint
 gst_neonhttp_src_request_dispatch (GstNeonhttpSrc * src, GstBuffer * outbuf)
 {
+  GstMapInfo map = GST_MAP_INFO_INIT;
   gint ret;
   gint read = 0;
-  gint sizetoread = GST_BUFFER_SIZE (outbuf);
+  gint sizetoread;
 
   /* Loop sending the request:
    * Retry whilst authentication fails and we supply it. */
 
   ssize_t len = 0;
 
+  if (!gst_buffer_map (outbuf, &map, GST_MAP_WRITE))
+    return -1;
+
+  sizetoread = map.size;
+
   while (sizetoread > 0) {
-    len = ne_read_response_block (src->request,
-        (gchar *) GST_BUFFER_DATA (outbuf) + read, sizetoread);
+    len = ne_read_response_block (src->request, (gchar *) map.data + read,
+        sizetoread);
     if (len > 0) {
       read += len;
       sizetoread -= len;
@@ -1005,7 +971,8 @@ gst_neonhttp_src_request_dispatch (GstNeonhttpSrc * src, GstBuffer * outbuf)
 
   }
 
-  GST_BUFFER_SIZE (outbuf) = read;
+  gst_buffer_set_size (outbuf, read);
+  GST_BUFFER_OFFSET (outbuf) = src->read_position;
 
   if (len < 0) {
     read = -2;
@@ -1026,6 +993,9 @@ gst_neonhttp_src_request_dispatch (GstNeonhttpSrc * src, GstBuffer * outbuf)
     src->read_position += read;
 
 done:
+
+  gst_buffer_unmap (outbuf, &map);
+
   return read;
 }
 
@@ -1081,33 +1051,35 @@ gst_neonhttp_src_unicodify (const gchar * str)
 
 /* GstURIHandler Interface */
 static guint
-gst_neonhttp_src_uri_get_type (void)
+gst_neonhttp_src_uri_get_type (GType type)
 {
   return GST_URI_SRC;
 }
 
 static const gchar *const *
-gst_neonhttp_src_uri_get_protocols (void)
+gst_neonhttp_src_uri_get_protocols (GType type)
 {
   static const gchar *protocols[] = { "http", "https", NULL };
 
   return protocols;
 }
 
-static const gchar *
+static gchar *
 gst_neonhttp_src_uri_get_uri (GstURIHandler * handler)
 {
   GstNeonhttpSrc *src = GST_NEONHTTP_SRC (handler);
 
-  return src->location;
+  /* FIXME: make thread-safe */
+  return g_strdup (src->location);
 }
 
 static gboolean
-gst_neonhttp_src_uri_set_uri (GstURIHandler * handler, const gchar * uri)
+gst_neonhttp_src_uri_set_uri (GstURIHandler * handler, const gchar * uri,
+    GError ** error)
 {
   GstNeonhttpSrc *src = GST_NEONHTTP_SRC (handler);
 
-  return gst_neonhttp_src_set_location (src, uri);
+  return gst_neonhttp_src_set_location (src, uri, error);
 }
 
 static void
@@ -1129,6 +1101,9 @@ gst_neonhttp_src_uri_handler_init (gpointer g_iface, gpointer iface_data)
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
+  GST_DEBUG_CATEGORY_INIT (neonhttpsrc_debug, "neonhttpsrc", 0,
+      "NEON HTTP src");
+
   return gst_element_register (plugin, "neonhttpsrc", GST_RANK_NONE,
       GST_TYPE_NEONHTTP_SRC);
 }

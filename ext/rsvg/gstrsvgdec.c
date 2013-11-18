@@ -60,8 +60,6 @@ GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
 #define gst_rsv_dec_parent_class parent_class
 G_DEFINE_TYPE (GstRsvgDec, gst_rsvg_dec, GST_TYPE_VIDEO_DECODER);
 
-static gboolean gst_rsvg_dec_reset (GstVideoDecoder * decoder, gboolean hard);
-
 static gboolean gst_rsvg_dec_stop (GstVideoDecoder * decoder);
 static gboolean gst_rsvg_dec_set_format (GstVideoDecoder * decoder,
     GstVideoCodecState * state);
@@ -95,7 +93,6 @@ gst_rsvg_dec_class_init (GstRsvgDecClass * klass)
 
   gobject_class->finalize = gst_rsvg_dec_finalize;
   video_decoder_class->stop = GST_DEBUG_FUNCPTR (gst_rsvg_dec_stop);
-  video_decoder_class->reset = GST_DEBUG_FUNCPTR (gst_rsvg_dec_reset);
   video_decoder_class->set_format = GST_DEBUG_FUNCPTR (gst_rsvg_dec_set_format);
   video_decoder_class->parse = GST_DEBUG_FUNCPTR (gst_rsvg_dec_parse);
   video_decoder_class->handle_frame =
@@ -103,18 +100,10 @@ gst_rsvg_dec_class_init (GstRsvgDecClass * klass)
 }
 
 static void
-dec_reset (GstRsvgDec * rsvg)
-{
-  rsvg->fps_n = 0;
-  rsvg->fps_d = 1;
-}
-
-static void
 gst_rsvg_dec_init (GstRsvgDec * rsvg)
 {
   GstVideoDecoder *decoder = GST_VIDEO_DECODER (rsvg);
   gst_video_decoder_set_packetized (decoder, FALSE);
-  dec_reset (rsvg);
 }
 
 static void
@@ -123,16 +112,6 @@ gst_rsvg_dec_finalize (GObject * object)
   G_OBJECT_CLASS (gst_rsvg_dec_parent_class)->finalize (object);
 }
 
-
-static gboolean
-gst_rsvg_dec_reset (GstVideoDecoder * decoder, gboolean hard)
-{
-  GstRsvgDec *dec = GST_RSVG_DEC (decoder);
-
-  dec_reset (dec);
-
-  return TRUE;
-}
 
 #define CAIRO_UNPREMULTIPLY(a,r,g,b) G_STMT_START { \
   b = (a > 0) ? MIN ((b * 255 + a / 2) / a, 255) : 0; \
@@ -293,13 +272,12 @@ static GstFlowReturn
 gst_rsvg_dec_parse (GstVideoDecoder * decoder, GstVideoCodecFrame * frame,
     GstAdapter * adapter, gboolean at_eos)
 {
-  GstRsvgDec *rsvg = GST_RSVG_DEC (decoder);
   gboolean completed = FALSE;
   const guint8 *data;
   guint size;
   guint i;
 
-  GST_LOG_OBJECT (rsvg, "parse start");
+  GST_LOG_OBJECT (decoder, "parse start");
   size = gst_adapter_available (adapter);
 
   /* "<svg></svg>" */
@@ -308,7 +286,7 @@ gst_rsvg_dec_parse (GstVideoDecoder * decoder, GstVideoCodecFrame * frame,
 
   data = gst_adapter_map (adapter, size);
   if (data == NULL) {
-    GST_ERROR_OBJECT (rsvg, "Unable to map memory");
+    GST_ERROR_OBJECT (decoder, "Unable to map memory");
     return GST_FLOW_ERROR;
   }
   for (i = 0; i < size - 4; i++) {
@@ -320,7 +298,7 @@ gst_rsvg_dec_parse (GstVideoDecoder * decoder, GstVideoCodecFrame * frame,
         return GST_VIDEO_DECODER_FLOW_NEED_DATA;
       data = gst_adapter_map (adapter, size);
       if (data == NULL) {
-        GST_ERROR_OBJECT (rsvg, "Unable to map memory");
+        GST_ERROR_OBJECT (decoder, "Unable to map memory");
         return GST_FLOW_ERROR;
       }
       break;
@@ -342,7 +320,7 @@ gst_rsvg_dec_parse (GstVideoDecoder * decoder, GstVideoCodecFrame * frame,
 
   if (completed) {
 
-    GST_LOG_OBJECT (rsvg, "have complete svg of %u bytes", size);
+    GST_LOG_OBJECT (decoder, "have complete svg of %u bytes", size);
 
     gst_video_decoder_add_to_frame (decoder, size);
     return gst_video_decoder_have_frame (decoder);
@@ -375,12 +353,11 @@ static gboolean
 gst_rsvg_dec_stop (GstVideoDecoder * decoder)
 {
   GstRsvgDec *rsvg = GST_RSVG_DEC (decoder);
+
   if (rsvg->input_state) {
     gst_video_codec_state_unref (rsvg->input_state);
     rsvg->input_state = NULL;
   }
-
-  gst_rsvg_dec_reset (decoder, TRUE);
 
   return TRUE;
 }

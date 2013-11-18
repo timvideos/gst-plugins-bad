@@ -67,8 +67,8 @@ struct _GstVTDec
   CMFormatDescriptionRef fmt_desc;
   VTDecompressionSessionRef session;
 
-  GstBuffer * cur_inbuf;
-  GPtrArray * cur_outbufs;
+  GQueue * cur_outbufs;
+  gboolean flush;
 };
 
 void gst_vtdec_register_elements (GstPlugin * plugin);

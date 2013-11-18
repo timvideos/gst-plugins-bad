@@ -1,61 +1,123 @@
-This is GStreamer Bad Plugins 1.0.2
+This is GStreamer Bad Plugins 1.2.0
 
-Changes since 1.0.1:
+Changes since 1.0:
 
-      * Parallel installability with 0.10.x series
-      * audioparse: add mode where caps are taken from upstream and only timestamping is performed
-      * directsoundsrc: port to 1.0
-      * dtsdec: fix buffer parsing
-      * fieldanalysis: actually build (remove from the NONPORTED plugins list)
-      * hlsdemux: numerous thread-safety fixes, and an invalid memory access fix
-      * mpegdemux: handle and combine downstream flow returns better
-      * mpegdemux: make work properly with dvdreadsrc
-      * mpegtsdemux: PES header parsing fixes; fix potential crash
-      * mpegtsdemux: First push EOS, then destroy all programs
-      * mpegtsmux: fix buffer refcounting issue
-      * mpeg4videoparse: correctly parse the full first frame; properly mark config data presence
-      * mpegvideoparse: correctly parse the full first frame; signal interlacing properly in caps
-      * pitch: fix for start times > 0 (e.g. ogg streaming)
-      * rtmpsink: handle RTMP_Write() return value correctly, fix memory leak
-      * scaletempo: fix timestamp and latency query handling, and event leak
-      * subenc: port to 1.0
+New API:
+ • GstContext negotiation / sharing / announcing for sharing a
+   generic context between elements, e.g. a display handle
+ • GL texture upload conversion meta for allowing different
+   buffer types to be converted to an OpenGL texture
+ • GstCapsFeatures as extension to GstCaps for allowing the
+   negotiation of specific memory or meta requirements between
+   elements
+ • GstMemory flags for contiguous and non-mappable memory
+ • The stream-start event has optional flags now, e.g. for signalling
+   sparse streams
+ • The stream-start even has an optional group-id field now to signal
+   all streams that should be played together
+ • Allocators library in gst-plugins-base, currently only with generic
+   dmabuf memory support
+ • insertbin library for easier handling of dynamically linked
+   pipelines (in -bad for now)
+ • EGL helper library (in -bad for now)
+ • MPEG-TS data structure library (in -bad for now)
+ • New GstVideoRegionOfInterestMeta to describe a region of interest on
+   video frames.
+ • GstVideoDecoder/Encoder has new ::flush() vfunc to replace the
+   ill-defined ::reset() vfunc.
+ • The URI query allows to query the redirected URI now.
 
-Bugs fixed since 1.0.1:
+Major changes:
+ • New tool: gst-play-1.0 in gst-plugins-base for basic playback
+   testing on the command line.
+ • New plugins:
+   ∘ mssdemux for Microsoft Smooth Streaming
+   ∘ dashdemux for DASH adaptive streaming protocol
+   ∘ bluez for interaction with Bluetooth devices
+   ∘ openjpeg for JPEG2000 decoding and encoding
+   ∘ daala for experimental Daala decoding and encoding
+   ∘ vpx plugin has experimental VP9 decoding and encoding support
+   ∘ webp plugin for WebP decoding (encoding to be added later)
+   ∘ Various others: yadif, srtp, sbc, fluidsynth, midiparse,
+     mfc, ivtv, accuraterip and audiofxbad
 
-      * 623387 : mpegdemux: check base_time before calculating new_start 
-      * 673414 : directsoundsrc: Port to 1.0
-      * 681459 : rtmpsink: memory leak
-      * 685709 : mpeg4videoparse: AVI file with XVID video doesn't want to preroll: p_length.avi
-      * 685895 : mpegvideoparse: signal interlacing correctly in caps using new " interlace-mode " field
-      * 686009 : rtmpsink: handle RTMP_Write() return value correctly
-      * 686294 : tsdemux: Fix checking P-STD_buffer marker in PES header
-      * 686327 : mpegtsmux: fix refcount issue with input buffers
-      * 686358 : tsdemux: fix potential crash dereferencing NULL program pointer
-      * 686520 : wayland: update to wayland-protocol 0.99
-      * 686547 : rtpopuspay outputs unparseable caps
-      * 686595 : [mpg123] misc improvements and fixes
-      * 686774 : gst-plugins-bad/curl: add a comment describing function...
-      * 686829 : opusdec: invalid gst_buffer_unmap() call for NULL buffer
+ • Moved plugins:
+   ∘ dtmf, vp8rtp, scaletempo and rtpmux plugins are in
+     gst-plugins-good now
 
-Changes since 1.0.0:
+ • Video:
+   ∘ Fix handling of interlaced video in converters such as videoscale
+     and videoconvert (e.g. scale both fields independently)
+   ∘ videoconvert will try harder to minimise quality losses when
+     conversion is necessary
+   ∘ The experimental GstSurfaceConverter, GstSurfaceMeta and
+     GstVideoContext APIs from the (confusingly-named) 
+     libgstbasevideo-1.0 library in gst-plugins-bad have now been
+     removed and been replaced by new APIs in GStreamer Core and
+     gst-plugins-base (see above). Since that was all that was left in
+     this library, the entire experimental libgstbasevideo-1.0 library
+     has been removed from gst-plugins-bad
+   ∘ Chroma subsampling and chroma siting conversion is better handled
+     in videoconvert and the support for interlaced video was improved.
+   ∘ New pinwheel and spoke patterns in videotestsrc
+   ∘ videomixer can now accept different video formats on its sinkpads
+     and converts to a common format during mixing
 
-      * fieldanalysis and frei0r plugins ported to 1.0
-      * DVD playback fixes
-      * pitch: transform timestamps properly after a seek
-      * camerabin fixes
+ • Audio:
+   ∘ audioconvert will try harder to minimise quality losses when
+     conversion is necessary
+   ∘ adder now allows muting/unmuting of its input streams, and also
+     per-input stream volume 
+   ∘ pulseaudio elements can switch between devices during playback now
+   ∘ aacparse can convert between ADTS←→RAW
 
-Bugs fixed since 1.0.0:
+ • Platform specific changes:
+   ∘ Caps, events, etc. are now printed in the GStreamer debug logs
+     with their content instead of just the pointer address even on
+     non-glibc platforms (e.g. Windows, OSX, Android).
+   ∘ Network elements (UDP/TCP) now work better with platforms,
+     where IPv6 sockets can't handle IPv4 (e.g. Windows)
+   ∘ Linux/BSD: v4l2 had many improvements and cleanups
 
-      * 667220 : dvdspu: add NV12 support
-      * 681562 : Issue setting " video-source " property on wrappercamerabinsrc
-      * 681564 : Issue setting " video-source-filter " property on wrappercamerabinsrc
-      * 681678 : frei0r: port to 1.0
-      * 684740 : chromaprint: resolve undefined symbols
-      * 684847 : curl: fix build on win32
-      * 685065 : Missing cast in curlbasesink
-      * 685159 : chromaprint: Missing unmap buffer in transform_ip
+ • Other changes:
+   ∘ gst-libav now uses libav 9
+   ∘ Static linking of plugins is supported now (also in 1.0.7)
+   ∘ rtspsrc: add support for NetClientClock: when the server suggests a
+     GstNetTimeProvider in the SDP, set up a GstNetClientClock that
+     slaves to the remote clock and suggest this clock in provide_clock.
+     Simplifies synchronized playback of a resource from an RTSP server.
+     gst-rtsp-server now supports adding this to the SDP and can provide
+     a network clock
+   ∘ RTP retransmission / NACK support and big RTP jitterbuffer improvements
+   ∘ SRTP and DTLS support
+   ∘ Changes to many elements and core to use the correct sticky event
+     order and also not lose any important sticky events during flushing
+   ∘ >1000 fixed bug reports, and many other bug fixes and other
+     improvements everywhere that had no bug report
 
-New features in 1.0.0:
+Things to look out for:
+ • Single header includes for all libraries, e.g. #include
+   <gst/video/video.h> - this was needed for some bindings.
+ • Stricter (correct) caps subset checking in some cases where this was
+   not correct before. Caps will now always fail to be a compatible
+   subset of another set of caps if the subset caps are missing some
+   fields that the superset caps have. This might lead to not-negotiated
+   errors if caps are incomplete now. However, it also prevents possible
+   data corruption caused by piping data formatted in an
+   incompatible/unexpected way into some elements. Check your h264 caps
+   for stream-format and alignment fields and AAC caps for the
+   stream-format field. This change will also be included in the next
+   stable 1.0.8 release.
+ • Stricter checking for missing events and correct sticky event order
+   (stream-start, caps, segment) in some places; this is not enabled in
+   stable releases by default, but you may get warnings when using git
+   builds, development releases or when compiling with
+   -UG_DISABLE_ASSERT in CFLAGS
+ • x264enc now outputs data in byte-stream by default if downstream has
+   ANY caps (e.g. appsink without caps set, filesink, udpsink,
+   tcpserversink etc.)
+ • The MPEG TS demuxer posts messages contain the PMT, PAT, etc. in a
+   different format now. This new format uses the data structures from
+   the new MPEGTS library
+ • The GstContext API has changed between 1.1.4 and 1.1.90
 
-      * Parallel installability with 0.10.x series
-      * See release notes for more details

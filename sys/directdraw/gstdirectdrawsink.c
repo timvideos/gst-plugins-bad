@@ -92,6 +92,7 @@ static gboolean gst_ddrawvideosink_get_format_from_caps (GstDirectDrawSink *
 static void gst_directdraw_sink_center_rect (GstDirectDrawSink * ddrawsink,
     RECT src, RECT dst, RECT * result);
 static const char *DDErrorString (HRESULT hr);
+static long FAR PASCAL WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 /* surfaces management functions */
 static void gst_directdraw_sink_surface_destroy (GstDirectDrawSink * ddrawsink,
@@ -149,6 +150,7 @@ gst_directdraw_sink_set_window_handle (GstXOverlay * overlay,
 
   if (window_handle) {
     HRESULT hres;
+    RECT rect;
 
     /* If we had an internal window, close it first */
     if (ddrawsink->video_window && ddrawsink->our_video_window) {
@@ -160,6 +162,21 @@ gst_directdraw_sink_set_window_handle (GstXOverlay * overlay,
 
     ddrawsink->video_window = (HWND) window_handle;
     ddrawsink->our_video_window = FALSE;
+
+    /* Hook WndProc and user_data */
+    ddrawsink->previous_user_data = (LONG_PTR) SetWindowLongPtr (
+        (HWND) window_handle, GWLP_USERDATA, (LONG_PTR) ddrawsink);
+    ddrawsink->previous_wndproc = (WNDPROC) SetWindowLongPtr (
+        (HWND) window_handle, GWLP_WNDPROC, (LONG_PTR) WndProc);
+    if (!ddrawsink->previous_wndproc)
+      GST_DEBUG_OBJECT (ddrawsink, "Failed to hook previous WndProc");
+
+    /* Get initial window size. If it changes, we will track it from the
+     * WndProc. */
+    GetClientRect ((HWND) window_handle, &rect);
+    ddrawsink->out_width = rect.right - rect.left;
+    ddrawsink->out_height = rect.bottom - rect.top;
+
     if (ddrawsink->setup) {
       /* update the clipper object with the new window */
       hres = IDirectDrawClipper_SetHWnd (ddrawsink->clipper, 0,
@@ -193,47 +210,52 @@ gst_directdraw_sink_navigation_send_event (GstNavigation * navigation,
   GstDirectDrawSink *ddrawsink = GST_DIRECTDRAW_SINK (navigation);
   GstEvent *event;
   GstVideoRectangle src, dst, result;
-  double x, y, old_x, old_y;
+  RECT rect;
+  gdouble x, y, old_x, old_y, xscale = 1.0, yscale=1.0;
   GstPad *pad = NULL;
 
   src.w = GST_VIDEO_SINK_WIDTH (ddrawsink);
   src.h = GST_VIDEO_SINK_HEIGHT (ddrawsink);
+  GetClientRect ((HWND) ddrawsink->video_window, &rect);
+  ddrawsink->out_width = rect.right - rect.left;
+  ddrawsink->out_height = rect.bottom - rect.top;
   dst.w = ddrawsink->out_width;
   dst.h = ddrawsink->out_height;
-  gst_video_sink_center_rect (src, dst, &result, FALSE);
 
   event = gst_event_new_navigation (structure);
 
-  /* Our coordinates can be wrong here if we centered the video */
+  if (ddrawsink->keep_aspect_ratio) {
+    gst_video_sink_center_rect (src, dst, &result, TRUE);
+  } else {
+    result.x = 0;
+    result.y = 0;
+    result.w = dst.w;
+    result.h = dst.h;
+  }
+
+  /* We calculate scaling using the original video frames geometry to include
+     pixel aspect ratio scaling. */
+  xscale = (gdouble) ddrawsink->video_width / result.w;
+  yscale = (gdouble) ddrawsink->video_height / result.h;
 
   /* Converting pointer coordinates to the non scaled geometry */
   if (gst_structure_get_double (structure, "pointer_x", &old_x)) {
     x = old_x;
-
-    if (x >= result.x && x <= (result.x + result.w)) {
-      x -= result.x;
-      x *= ddrawsink->video_width;
-      x /= result.w;
-    } else {
-      x = 0;
-    }
-    GST_DEBUG_OBJECT (ddrawsink, "translated navigation event x "
-        "coordinate from %f to %f", old_x, x);
-    gst_structure_set (structure, "pointer_x", G_TYPE_DOUBLE, x, NULL);
+    x = MIN (x, result.x + result.w);
+    x = MAX (x - result.x, 0);
+    gst_structure_set (structure, "pointer_x", G_TYPE_DOUBLE,
+        (gdouble) x * xscale, NULL);
+    GST_DEBUG_OBJECT (ddrawsink,
+        "translated navigation event x coordinate from %f to %f", old_x, x);
   }
   if (gst_structure_get_double (structure, "pointer_y", &old_y)) {
     y = old_y;
-
-    if (y >= result.y && y <= (result.y + result.h)) {
-      y -= result.y;
-      y *= ddrawsink->video_height;
-      y /= result.h;
-    } else {
-      y = 0;
-    }
-    GST_DEBUG_OBJECT (ddrawsink, "translated navigation event y "
-        "coordinate from %f to %f", old_y, y);
-    gst_structure_set (structure, "pointer_y", G_TYPE_DOUBLE, y, NULL);
+    y = MIN (y, result.y + result.h);
+    y = MAX (y - result.y, 0);
+    gst_structure_set (structure, "pointer_y", G_TYPE_DOUBLE,
+        (gdouble) y * yscale, NULL);
+    GST_DEBUG_OBJECT (ddrawsink,
+        "translated navigation event x coordinate from %f to %f", old_y, y);
   }
 
   pad = gst_pad_get_peer (GST_VIDEO_SINK_PAD (ddrawsink));
@@ -496,6 +518,8 @@ gst_directdraw_sink_init (GstDirectDrawSink * ddrawsink,
   ddrawsink->clipper = NULL;
   ddrawsink->video_window = NULL;
   ddrawsink->our_video_window = TRUE;
+  ddrawsink->previous_wndproc = NULL;
+  ddrawsink->previous_user_data = (LONG_PTR)NULL;
   ddrawsink->last_buffer = NULL;
   ddrawsink->caps = NULL;
   ddrawsink->window_thread = NULL;
@@ -1419,6 +1443,11 @@ gst_directdraw_sink_setup_ddraw (GstDirectDrawSink * ddrawsink)
 static LRESULT FAR PASCAL
 WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+  GstDirectDrawSink *ddrawsink;
+  LRESULT ret;
+
+  ddrawsink = (GstDirectDrawSink *) GetWindowLongPtr (hWnd, GWLP_USERDATA);
+
   switch (message) {
     case WM_CREATE:{
       LPCREATESTRUCT crs = (LPCREATESTRUCT) lParam;
@@ -1541,8 +1570,25 @@ WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
       PostQuitMessage (0);
       return 0;
   }
+  if (ddrawsink && ddrawsink->previous_wndproc) {
+    /* If there was a previous custom WndProc, call it */
 
-  return DefWindowProc (hWnd, message, wParam, lParam);
+    /* Temporarily restore the previous user_data */
+    if (ddrawsink->previous_user_data)
+      SetWindowLongPtr ( hWnd, GWLP_USERDATA, ddrawsink->previous_user_data );
+
+    /* Call previous WndProc */
+    ret = CallWindowProc (
+        ddrawsink->previous_wndproc, hWnd, message, wParam, lParam);
+
+    /* Point the user_data back to our ddraw_sink */
+    SetWindowLongPtr ( hWnd, GWLP_USERDATA, (LONG_PTR)ddrawsink );
+  } else {
+    /* if there was no previous custom WndProc, call Window's default one */
+    ret = DefWindowProc (hWnd, message, wParam, lParam);
+  }
+
+  return ret;
 }
 
 static gpointer

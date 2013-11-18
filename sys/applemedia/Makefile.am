@@ -3,17 +3,27 @@ plugin_LTLIBRARIES = libgstapplemedia.la
 libgstapplemedia_la_SOURCES =			\
 	plugin.m				\
 	vtutil.c				\
-	bufferfactory.m				\
 	corevideobuffer.c			\
 	coremediabuffer.c			\
 	coremediactx.c				\
-	cvapi.c					\
-	cmapi.c					\
 	vtapi.c					\
+	atdec.c 				\
 	dynapi.c
 
+libgstapplemedia_la_CPPFLAGS =			\
+	-Dgst_dyn_api_get_type=gst_dyn_api_priv_get_type			\
+	-Dgst_dyn_api_debug=gst_dyn_api_priv_debug				\
+	-D_gst_dyn_api_new=_gst_dyn_api_priv_new				\
+	-Dgst_core_media_buffer_new=gst_core_media_buffer_priv_new		\
+	-Dgst_core_media_buffer_get_type=gst_core_media_buffer_priv_get_type	\
+	-Dgst_core_media_buffer_get_pixel_buffer=gst_core_media_buffer_priv_get_pixel_buffer\
+	-Dgst_core_video_buffer_new=gst_core_video_buffer_priv_new		\
+	-Dgst_core_video_buffer_get_type=gst_core_video_buffer_priv_get_type	\
+	-Dgst_core_media_ctx_new=gst_core_media_ctx_priv_new			\
+	-Dgst_core_media_ctx_get_type=gst_core_media_ctx_priv_get_type
+
 libgstapplemedia_la_CFLAGS =			\
-	$(GST_CFLAGS)			\
+	$(GST_CFLAGS)				\
 	$(GST_BASE_CFLAGS)			\
 	$(GST_PLUGINS_BASE_CFLAGS)
 
@@ -29,7 +39,9 @@ endif
 libgstapplemedia_la_LIBADD =			\
 	$(GST_BASE_LIBS)			\
 	$(GST_PLUGINS_BASE_LIBS)		\
-	-lgstvideo-$(GST_API_VERSION)
+	-lgstvideo-$(GST_API_VERSION) 		\
+	-lgstaudio-$(GST_API_VERSION)		\
+	$(GMODULE_NO_EXPORT_LIBS)
 
 libgstapplemedia_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
 
@@ -38,52 +50,42 @@ libgstapplemedia_la_LDFLAGS =			\
 	$(GST_BASE_LDFLAGS)			\
 	$(GST_PLUGINS_BASE_LDFLAGS)		\
 	-Wl,-framework -Wl,CoreFoundation	\
-	-Wl,-framework -Wl,CoreVideo
+	-Wl,-framework -Wl,CoreMedia		\
+	-Wl,-framework -Wl,CoreVideo 		\
+	-Wl,-framework -Wl,AudioToolbox
 
 noinst_HEADERS =				\
 	qtkitvideosrc.h				\
-	miovideosrc.h				\
-	miovideodevice.h			\
 	avfvideosrc.h				\
-	celvideosrc.h				\
 	vth264decbin.h				\
 	vth264encbin.h				\
 	vtenc.h					\
 	vtdec.h					\
 	vtutil.h				\
-	bufferfactory.h				\
 	corevideobuffer.h			\
 	coremediabuffer.h			\
 	coremediactx.h				\
-	cvapi.h					\
-	cmapi.h					\
-	mioapi.h				\
-	mtapi.h					\
-	celapi.h				\
 	vtapi.h					\
+	atdec.h 				\
 	dynapi.h				\
-	dynapi-internal.h
+	dynapi-internal.h                       \
+	iosassetsrc.h
 
 if HAVE_IOS
 
 libgstapplemedia_la_SOURCES +=			\
-	avfvideosrc.m				\
-	celvideosrc.c				\
-	mtapi.c					\
-	celapi.c
+	iosassetsrc.m
 
 libgstapplemedia_la_LDFLAGS +=			\
-	-Wl,-framework -Wl,CoreMedia		\
 	-Wl,-framework -Wl,Foundation		\
-	-Wl,-framework -Wl,AVFoundation
+	-Wl,-framework -Wl,AssetsLibrary
 
 else
 
 libgstapplemedia_la_SOURCES +=			\
 	qtkitvideosrc.m				\
 	vtenc.c 				\
-	vtdec.c 				\
-	mioapi.c
+	vtdec.c
 
 libgstapplemedia_la_LDFLAGS +=			\
 	-Wl,-framework -Wl,Cocoa		\
@@ -91,3 +93,12 @@ libgstapplemedia_la_LDFLAGS +=			\
 
 endif
 
+if HAVE_AVFOUNDATION
+
+libgstapplemedia_la_SOURCES +=			\
+	avfvideosrc.m
+
+libgstapplemedia_la_LDFLAGS +=			\
+	-Wl,-framework -Wl,AVFoundation
+
+endif

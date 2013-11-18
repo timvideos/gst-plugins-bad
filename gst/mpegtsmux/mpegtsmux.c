@@ -92,6 +92,7 @@
  * with newer GLib versions (>= 2.31.0) */
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
+#include <gst/tag/tag.h>
 #include <gst/video/video.h>
 
 #include "mpegtsmux.h"
@@ -135,7 +136,7 @@ static GstStaticPadTemplate mpegtsmux_sink_factory =
         "dynamic_range = (int) [ 0, 255 ], "
         "emphasis = (boolean) { FALSE, TRUE }, "
         "mute = (boolean) { FALSE, TRUE }; " "audio/x-ac3;" "audio/x-dts;"
-        "subpicture/x-dvb;" "private/teletext"));
+        "subpicture/x-dvb;" "application/x-teletext"));
 
 static GstStaticPadTemplate mpegtsmux_src_factory =
 GST_STATIC_PAD_TEMPLATE ("src",
@@ -340,6 +341,12 @@ mpegtsmux_pad_reset (MpegTsPadData * pad_data)
   /* reference owned elsewhere */
   pad_data->stream = NULL;
   pad_data->prog = NULL;
+
+  if (pad_data->language) {
+    g_free (pad_data->language);
+    pad_data->language = NULL;
+  }
+
 }
 
 static void
@@ -639,14 +646,15 @@ mpegtsmux_create_stream (MpegTsMux * mux, MpegTsPadData * ts_data)
     }
   } else if (strcmp (mt, "subpicture/x-dvb") == 0) {
     st = TSMUX_ST_PS_DVB_SUBPICTURE;
-  } else if (strcmp (mt, "private/teletext") == 0) {
+  } else if (strcmp (mt, "application/x-teletext") == 0) {
     st = TSMUX_ST_PS_TELETEXT;
     /* needs a particularly sized layout */
     ts_data->prepare_func = mpegtsmux_prepare_teletext;
   }
 
   if (st != TSMUX_ST_RESERVED) {
-    ts_data->stream = tsmux_create_stream (mux->tsmux, st, ts_data->pid);
+    ts_data->stream = tsmux_create_stream (mux->tsmux, st, ts_data->pid,
+        ts_data->language);
   } else {
     GST_DEBUG_OBJECT (pad, "Failed to determine stream type");
   }
@@ -738,7 +746,7 @@ mpegtsmux_create_streams (MpegTsMux * mux)
 
     ts_data->prog = mux->programs[ts_data->prog_id];
     if (ts_data->prog == NULL) {
-      ts_data->prog = tsmux_program_new (mux->tsmux);
+      ts_data->prog = tsmux_program_new (mux->tsmux, ts_data->prog_id);
       if (ts_data->prog == NULL)
         goto no_program;
       tsmux_set_pmt_interval (ts_data->prog, mux->pmt_interval);
@@ -779,9 +787,13 @@ mpegtsmux_sink_event (GstCollectPads * pads, GstCollectData * data,
   MpegTsMux *mux = GST_MPEG_TSMUX (user_data);
   gboolean res = FALSE;
   gboolean forward = TRUE;
+  MpegTsPadData *pad_data = (MpegTsPadData *) data;
+
+#ifndef GST_DISABLE_GST_DEBUG
   GstPad *pad;
 
   pad = data->pad;
+#endif
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CUSTOM_DOWNSTREAM:
@@ -814,6 +826,32 @@ mpegtsmux_sink_event (GstCollectPads * pads, GstCollectData * data,
 
       mux->pending_key_unit_ts = running_time;
       gst_event_replace (&mux->force_key_unit_event, event);
+      break;
+    }
+    case GST_EVENT_TAG:{
+      GstTagList *list;
+      gchar *lang = NULL;
+
+      GST_DEBUG_OBJECT (mux, "received tag event");
+      gst_event_parse_tag (event, &list);
+
+      /* Matroska wants ISO 639-2B code, taglist most likely contains 639-1 */
+      if (gst_tag_list_get_string (list, GST_TAG_LANGUAGE_CODE, &lang)) {
+        const gchar *lang_code;
+
+        lang_code = gst_tag_get_language_code_iso_639_2B (lang);
+        if (lang_code) {
+          GST_DEBUG_OBJECT (pad, "Setting language to '%s'", lang_code);
+          pad_data->language = g_strdup (lang_code);
+        } else {
+          GST_WARNING_OBJECT (pad, "Did not get language code for '%s'", lang);
+        }
+        g_free (lang);
+      }
+
+      /* handled this, don't want collectpads to forward it downstream */
+      res = TRUE;
+      forward = FALSE;
       break;
     }
     default:
@@ -977,6 +1015,7 @@ mpegtsmux_clip_inc_running_time (GstCollectPads * pads,
       GST_DEBUG_OBJECT (cdata->pad, "clipping buffer on pad outside segment");
       gst_buffer_unref (buf);
       *outbuf = NULL;
+      goto beach;
     } else {
       GST_LOG_OBJECT (cdata->pad, "buffer pts %" GST_TIME_FORMAT " -> %"
           GST_TIME_FORMAT " running time",
@@ -1018,11 +1057,12 @@ mpegtsmux_clip_inc_running_time (GstCollectPads * pads,
   if (pad_data->prepare_func) {
     MpegTsMux *mux = (MpegTsMux *) user_data;
 
-    buf = pad_data->prepare_func (buf, pad_data, mux);
-    if (buf)
-      gst_buffer_replace (outbuf, buf);
+    *outbuf = pad_data->prepare_func (buf, pad_data, mux);
+    g_assert (*outbuf);
+    gst_buffer_unref (buf);
   }
 
+beach:
   return GST_FLOW_OK;
 }
 
@@ -1612,11 +1652,16 @@ mpegtsdemux_prepare_srcpad (MpegTsMux * mux)
   GstSegment seg;
   /* we are not going to seek */
   GstEvent *new_seg;
+  gchar s_id[32];
   GstCaps *caps = gst_caps_new_simple ("video/mpegts",
       "systemstream", G_TYPE_BOOLEAN, TRUE,
       "packetsize", G_TYPE_INT,
       (mux->m2ts_mode ? M2TS_PACKET_LENGTH : NORMAL_TS_PACKET_LENGTH),
       NULL);
+
+  /* stream-start (FIXME: create id based on input ids) */
+  g_snprintf (s_id, sizeof (s_id), "mpegtsmux-%08x", g_random_int ());
+  gst_pad_push_event (mux->srcpad, gst_event_new_stream_start (s_id));
 
   gst_segment_init (&seg, GST_FORMAT_TIME);
   new_seg = gst_event_new_segment (&seg);

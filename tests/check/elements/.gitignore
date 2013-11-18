@@ -1,6 +1,8 @@
 .dirstamp
+aiffparse
 asfmux
 assrender
+audiomixer
 autoconvert
 autovideoconvert
 baseaudiovisualizer
@@ -8,6 +10,7 @@ camerabin
 camerabin2
 curlfilesink
 curlftpsink
+curlsftpsink
 curlhttpsink
 curlsmtpsink
 deinterleave

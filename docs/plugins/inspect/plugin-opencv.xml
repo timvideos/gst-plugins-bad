@@ -3,10 +3,10 @@
   <description>GStreamer OpenCV Plugins</description>
   <filename>../../ext/opencv/.libs/libgstopencv.so</filename>
   <basename>libgstopencv.so</basename>
-  <version>1.1.0.1</version>
+  <version>1.2.0</version>
   <license>LGPL</license>
   <source>gst-plugins-bad</source>
-  <package>GStreamer Bad Plug-ins git</package>
+  <package>GStreamer Bad Plug-ins source release</package>
   <origin>Unknown package origin</origin>
   <elements>
     <element>
@@ -136,6 +136,27 @@
       </pads>
     </element>
     <element>
+      <name>disparity</name>
+      <longname>Stereo image disparity (depth) map calculation</longname>
+      <class>Filter/Effect/Video</class>
+      <description>Calculates the stereo disparity map from two (sequences of) rectified and aligned stereo images</description>
+      <author>Miguel Casas-Sanchez &lt;miguelecasassanchez@gmail.com&gt;</author>
+      <pads>
+        <caps>
+          <name>sink</name>
+          <direction>sink</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGB, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+        <caps>
+          <name>src</name>
+          <direction>source</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGB, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+      </pads>
+    </element>
+    <element>
       <name>edgedetect</name>
       <longname>edgedetect</longname>
       <class>Filter/Effect/Video</class>
@@ -199,6 +220,50 @@
       </pads>
     </element>
     <element>
+      <name>grabcut</name>
+      <longname>Grabcut-based image FG/BG segmentation</longname>
+      <class>Filter/Effect/Video</class>
+      <description>Runs Grabcut algorithm on input alpha. Values: BG=0, FG=1, PR_BG=2, PR_FGD=3; NOTE: larger values of alpha (notably 255) are interpreted as PR_FGD too. 
+IN CASE OF no alpha mask input (all 0&apos;s or all 1&apos;s), the &apos;face&apos; downstream event is used to create a bbox of PR_FG elements.
+IF nothing is present, then nothing is done.</description>
+      <author>Miguel Casas-Sanchez &lt;miguelecasassanchez@gmail.com&gt;</author>
+      <pads>
+        <caps>
+          <name>sink</name>
+          <direction>sink</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGBA, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+        <caps>
+          <name>src</name>
+          <direction>source</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGBA, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+      </pads>
+    </element>
+    <element>
+      <name>handdetect</name>
+      <longname>handdetect</longname>
+      <class>Filter/Effect/Video</class>
+      <description>Performs hand gesture detection on videos, providing detected hand positions via bus message and navigation event, and deals with hand gesture events</description>
+      <author>Andol Li &lt;andol@andol.info&gt;</author>
+      <pads>
+        <caps>
+          <name>sink</name>
+          <direction>sink</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGB, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+        <caps>
+          <name>src</name>
+          <direction>source</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGB, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+      </pads>
+    </element>
+    <element>
       <name>motioncells</name>
       <longname>motioncells</longname>
       <class>Filter/Effect/Video</class>
@@ -246,6 +311,69 @@
       <class>Filter/Effect/Video</class>
       <description>Applies pyramid segmentation to a video or image.</description>
       <author>Michael Sheldon &lt;mike@mikeasoft.com&gt;</author>
+      <pads>
+        <caps>
+          <name>sink</name>
+          <direction>sink</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGB, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+        <caps>
+          <name>src</name>
+          <direction>source</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGB, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+      </pads>
+    </element>
+    <element>
+      <name>retinex</name>
+      <longname>Retinex image colour enhacement</longname>
+      <class>Filter/Effect/Video</class>
+      <description>Multiscale retinex for colour image enhancement</description>
+      <author>Miguel Casas-Sanchez &lt;miguelecasassanchez@gmail.com&gt;</author>
+      <pads>
+        <caps>
+          <name>sink</name>
+          <direction>sink</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGB, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+        <caps>
+          <name>src</name>
+          <direction>source</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGB, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+      </pads>
+    </element>
+    <element>
+      <name>segmentation</name>
+      <longname>Foreground/background video sequence segmentation</longname>
+      <class>Filter/Effect/Video</class>
+      <description>Create a Foregound/Background mask applying a particular algorithm</description>
+      <author>Miguel Casas-Sanchez &lt;miguelecasassanchez@gmail.com&gt;</author>
+      <pads>
+        <caps>
+          <name>sink</name>
+          <direction>sink</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGBA, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+        <caps>
+          <name>src</name>
+          <direction>source</direction>
+          <presence>always</presence>
+          <details>video/x-raw, format=(string)RGBA, width=(int)[ 1, 2147483647 ], height=(int)[ 1, 2147483647 ], framerate=(fraction)[ 0/1, 2147483647/1 ]</details>
+        </caps>
+      </pads>
+    </element>
+    <element>
+      <name>skindetect</name>
+      <longname>skindetect</longname>
+      <class>Filter/Effect/Video</class>
+      <description>Performs non-parametric skin detection on input</description>
+      <author>Miguel Casas-Sanchez &lt;miguelecasassanchez@gmail.com&gt;</author>
       <pads>
         <caps>
           <name>sink</name>

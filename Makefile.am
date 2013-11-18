@@ -35,6 +35,10 @@ check-torture:
 	true
 endif
 
+win32-update:
+	cp $(top_builddir)/win32/common/config.h-new \
+	    $(top_srcdir)/win32/common/config.h
+
 include $(top_srcdir)/common/coverage/lcov.mak
 
 check: check-exports
@@ -97,6 +101,7 @@ CRUFT_DIRS = \
 	$(top_srcdir)/gst/valve \
 	$(top_srcdir)/gst-libs/gst/baseparse \
 	$(top_srcdir)/gst-libs/gst/video \
+	$(top_srcdir)/gst-libs/gst/signalprocessor \
 	$(top_srcdir)/tests/examples/scaletempo \
 	$(top_srcdir)/tests/examples/shapewipe \
 	$(top_srcdir)/tests/examples/switch \

@@ -183,6 +183,9 @@ gst_hls_sink_init (GstHlsSink * sink)
   sink->max_files = DEFAULT_MAX_FILES;
   sink->target_duration = DEFAULT_TARGET_DURATION;
 
+  /* haven't added a sink yet, make it is detected as a sink meanwhile */
+  GST_OBJECT_FLAG_SET (sink, GST_ELEMENT_FLAG_SINK);
+
   gst_hls_sink_reset (sink);
 }
 
@@ -193,10 +196,6 @@ gst_hls_sink_reset (GstHlsSink * sink)
   sink->count = 0;
   sink->timeout_id = 0;
   sink->last_running_time = 0;
-  /* we don't need to unref since we gst_bin_add-ed multifilesink
-   * to ourselves
-   */
-  sink->multifilesink = NULL;
   sink->waiting_fku = FALSE;
   gst_event_replace (&sink->force_key_unit_event, NULL);
   gst_segment_init (&sink->segment, GST_FORMAT_UNDEFINED);

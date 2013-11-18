@@ -16,14 +16,6 @@ gint64  arg3
 </SIGNAL>
 
 <SIGNAL>
-<NAME>GstCDAudio::track-change</NAME>
-<RETURNS>void</RETURNS>
-<FLAGS>l</FLAGS>
-GstCDAudio *gstcdaudio
-gint  arg1
-</SIGNAL>
-
-<SIGNAL>
 <NAME>GstInputSelector::block</NAME>
 <RETURNS>gint64</RETURNS>
 <FLAGS>la</FLAGS>
@@ -518,5 +510,75 @@ GstCameraBin2 *gstcamerabin2
 <RETURNS>void</RETURNS>
 <FLAGS>la</FLAGS>
 GstCameraBin2 *gstcamerabin2
+</SIGNAL>
+
+<SIGNAL>
+<NAME>GstUvcH264Src::get-boolean-setting</NAME>
+<RETURNS>gboolean</RETURNS>
+<FLAGS>la</FLAGS>
+GstUvcH264Src *gstuvch264src
+gchar *arg1
+gpointer  arg2
+gpointer  arg3
+</SIGNAL>
+
+<SIGNAL>
+<NAME>GstUvcH264Src::get-enum-setting</NAME>
+<RETURNS>gboolean</RETURNS>
+<FLAGS>la</FLAGS>
+GstUvcH264Src *gstuvch264src
+gchar *arg1
+gpointer  arg2
+gpointer  arg3
+</SIGNAL>
+
+<SIGNAL>
+<NAME>GstUvcH264Src::get-int-setting</NAME>
+<RETURNS>gboolean</RETURNS>
+<FLAGS>la</FLAGS>
+GstUvcH264Src *gstuvch264src
+gchar *arg1
+gpointer  arg2
+gpointer  arg3
+gpointer  arg4
+</SIGNAL>
+
+<SIGNAL>
+<NAME>GstSrtpEnc::soft-limit</NAME>
+<RETURNS>void</RETURNS>
+<FLAGS>l</FLAGS>
+GstSrtpEnc *gstsrtpenc
+guint  arg1
+</SIGNAL>
+
+<SIGNAL>
+<NAME>GstSrtpDec::clear-keys</NAME>
+<RETURNS>void</RETURNS>
+<FLAGS>la</FLAGS>
+GstSrtpDec *gstsrtpdec
+</SIGNAL>
+
+<SIGNAL>
+<NAME>GstSrtpDec::hard-limit</NAME>
+<RETURNS>GstCaps*</RETURNS>
+<FLAGS>l</FLAGS>
+GstSrtpDec *gstsrtpdec
+guint  arg1
+</SIGNAL>
+
+<SIGNAL>
+<NAME>GstSrtpDec::request-key</NAME>
+<RETURNS>GstCaps*</RETURNS>
+<FLAGS>l</FLAGS>
+GstSrtpDec *gstsrtpdec
+guint  arg1
+</SIGNAL>
+
+<SIGNAL>
+<NAME>GstSrtpDec::soft-limit</NAME>
+<RETURNS>GstCaps*</RETURNS>
+<FLAGS>l</FLAGS>
+GstSrtpDec *gstsrtpdec
+guint  arg1
 </SIGNAL>
 

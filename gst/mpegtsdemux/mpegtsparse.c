@@ -91,7 +91,7 @@ mpegts_parse_program_stopped (MpegTSBase * base, MpegTSBaseProgram * program);
 
 static GstFlowReturn
 mpegts_parse_push (MpegTSBase * base, MpegTSPacketizerPacket * packet,
-    MpegTSPacketizerSection * section);
+    GstMpegTsSection * section);
 
 static MpegTSParsePad *mpegts_parse_create_tspad (MpegTSParse2 * parse,
     const gchar * name);
@@ -146,10 +146,19 @@ mpegts_parse_class_init (MpegTSParse2Class * klass)
 static void
 mpegts_parse_init (MpegTSParse2 * parse)
 {
-  GST_MPEGTS_BASE (parse)->program_size = sizeof (MpegTSParseProgram);
+  MpegTSBase *base = (MpegTSBase *) parse;
+
+  base->program_size = sizeof (MpegTSParseProgram);
+  /* We will only need to handle data/section if we have request pads */
+  base->push_data = FALSE;
+  base->push_section = FALSE;
 
   parse->srcpad = gst_pad_new_from_static_template (&src_template, "src");
+  parse->first = TRUE;
   gst_element_add_pad (GST_ELEMENT (parse), parse->srcpad);
+
+  parse->have_group_id = FALSE;
+  parse->group_id = G_MAXUINT;
 }
 
 static void
@@ -178,6 +187,58 @@ mpegts_parse_reset (MpegTSBase * base)
   /* SIT */
   MPEGTS_BIT_SET (base->known_psi, 0x1f);
 
+  GST_MPEGTS_PARSE (base)->first = TRUE;
+  GST_MPEGTS_PARSE (base)->have_group_id = FALSE;
+  GST_MPEGTS_PARSE (base)->group_id = G_MAXUINT;
+
+  g_list_free_full (GST_MPEGTS_PARSE (base)->pending_buffers,
+      (GDestroyNotify) gst_buffer_unref);
+  GST_MPEGTS_PARSE (base)->pending_buffers = NULL;;
+}
+
+static void
+prepare_src_pad (MpegTSBase * base, MpegTSParse2 * parse)
+{
+  if (base->packetizer->packet_size) {
+    GstEvent *event;
+    gchar *stream_id;
+    GstCaps *caps;
+
+    stream_id =
+        gst_pad_create_stream_id (parse->srcpad, GST_ELEMENT_CAST (base),
+        "multi-program");
+
+    event =
+        gst_pad_get_sticky_event (parse->parent.sinkpad, GST_EVENT_STREAM_START,
+        0);
+    if (event) {
+      if (gst_event_parse_group_id (event, &parse->group_id))
+        parse->have_group_id = TRUE;
+      else
+        parse->have_group_id = FALSE;
+      gst_event_unref (event);
+    } else if (!parse->have_group_id) {
+      parse->have_group_id = TRUE;
+      parse->group_id = gst_util_group_id_next ();
+    }
+    event = gst_event_new_stream_start (stream_id);
+    if (parse->have_group_id)
+      gst_event_set_group_id (event, parse->group_id);
+
+    gst_pad_push_event (parse->srcpad, event);
+    g_free (stream_id);
+
+    caps = gst_caps_new_simple ("video/mpegts",
+        "systemstream", G_TYPE_BOOLEAN, TRUE,
+        "packetsize", G_TYPE_INT, base->packetizer->packet_size, NULL);
+
+    gst_pad_set_caps (parse->srcpad, caps);
+    gst_caps_unref (caps);
+
+    gst_pad_push_event (parse->srcpad, gst_event_new_segment (&base->segment));
+
+    parse->first = FALSE;
+  }
 }
 
 static gboolean
@@ -185,6 +246,15 @@ push_event (MpegTSBase * base, GstEvent * event)
 {
   MpegTSParse2 *parse = (MpegTSParse2 *) base;
   GList *tmp;
+
+  if (G_UNLIKELY (parse->first)) {
+    /* We will send the segment when really starting  */
+    if (G_UNLIKELY (GST_EVENT_TYPE (event) == GST_EVENT_SEGMENT)) {
+      gst_event_unref (event);
+      return TRUE;
+    }
+    prepare_src_pad (base, parse);
+  }
 
   for (tmp = parse->srcpads; tmp; tmp = tmp->next) {
     GstPad *pad = (GstPad *) tmp->data;
@@ -232,6 +302,7 @@ static void
 mpegts_parse_pad_removed (GstElement * element, GstPad * pad)
 {
   MpegTSParsePad *tspad;
+  MpegTSBase *base = (MpegTSBase *) element;
   MpegTSParse2 *parse = GST_MPEGTS_PARSE (element);
 
   if (gst_pad_get_direction (pad) == GST_PAD_SINK)
@@ -243,6 +314,10 @@ mpegts_parse_pad_removed (GstElement * element, GstPad * pad)
 
     parse->srcpads = g_list_remove_all (parse->srcpads, pad);
   }
+  if (parse->srcpads == NULL) {
+    base->push_data = FALSE;
+    base->push_section = FALSE;
+  }
 
   if (GST_ELEMENT_CLASS (parent_class)->pad_removed)
     GST_ELEMENT_CLASS (parent_class)->pad_removed (element, pad);
@@ -252,11 +327,13 @@ static GstPad *
 mpegts_parse_request_new_pad (GstElement * element, GstPadTemplate * template,
     const gchar * padname, const GstCaps * caps)
 {
+  MpegTSBase *base = (MpegTSBase *) element;
   MpegTSParse2 *parse;
   MpegTSParsePad *tspad;
   MpegTSParseProgram *parseprogram;
   GstPad *pad;
   gint program_num = -1;
+  GstEvent *event;
   gchar *stream_id;
 
   g_return_val_if_fail (template != NULL, NULL);
@@ -283,11 +360,31 @@ mpegts_parse_request_new_pad (GstElement * element, GstPadTemplate * template,
 
   pad = tspad->pad;
   parse->srcpads = g_list_append (parse->srcpads, pad);
+  base->push_data = TRUE;
+  base->push_section = TRUE;
 
   gst_pad_set_active (pad, TRUE);
 
   stream_id = gst_pad_create_stream_id (pad, element, padname + 8);
-  gst_pad_push_event (pad, gst_event_new_stream_start (stream_id));
+
+  event =
+      gst_pad_get_sticky_event (parse->parent.sinkpad, GST_EVENT_STREAM_START,
+      0);
+  if (event) {
+    if (gst_event_parse_group_id (event, &parse->group_id))
+      parse->have_group_id = TRUE;
+    else
+      parse->have_group_id = FALSE;
+    gst_event_unref (event);
+  } else if (!parse->have_group_id) {
+    parse->have_group_id = TRUE;
+    parse->group_id = gst_util_group_id_next ();
+  }
+  event = gst_event_new_stream_start (stream_id);
+  if (parse->have_group_id)
+    gst_event_set_group_id (event, parse->group_id);
+
+  gst_pad_push_event (pad, event);
   g_free (stream_id);
 
   gst_element_add_pad (element, pad);
@@ -305,7 +402,7 @@ mpegts_parse_release_pad (GstElement * element, GstPad * pad)
 
 static GstFlowReturn
 mpegts_parse_tspad_push_section (MpegTSParse2 * parse, MpegTSParsePad * tspad,
-    MpegTSPacketizerSection * section, MpegTSPacketizerPacket * packet)
+    GstMpegTsSection * section, MpegTSPacketizerPacket * packet)
 {
   GstFlowReturn ret = GST_FLOW_OK;
   gboolean to_push = TRUE;
@@ -383,7 +480,7 @@ pad_clear_for_push (GstPad * pad, MpegTSParse2 * parse)
 
 static GstFlowReturn
 mpegts_parse_push (MpegTSBase * base, MpegTSPacketizerPacket * packet,
-    MpegTSPacketizerSection * section)
+    GstMpegTsSection * section)
 {
   MpegTSParse2 *parse = (MpegTSParse2 *) base;
   guint32 pads_cookie;
@@ -392,10 +489,6 @@ mpegts_parse_push (MpegTSBase * base, MpegTSPacketizerPacket * packet,
   MpegTSParsePad *tspad;
   GstFlowReturn ret;
   GList *srcpads;
-
-  /* Shortcut: If no request pads exist, just return */
-  if (parse->srcpads == NULL)
-    return GST_FLOW_OK;
 
   GST_OBJECT_LOCK (parse);
   srcpads = parse->srcpads;
@@ -470,6 +563,33 @@ static GstFlowReturn
 mpegts_parse_input_done (MpegTSBase * base, GstBuffer * buffer)
 {
   MpegTSParse2 *parse = GST_MPEGTS_PARSE (base);
+  GstFlowReturn ret = GST_FLOW_OK;
+
+  if (G_UNLIKELY (parse->first))
+    prepare_src_pad (base, parse);
+
+  if (G_UNLIKELY (parse->first)) {
+    parse->pending_buffers = g_list_append (parse->pending_buffers, buffer);
+    return GST_FLOW_OK;
+  }
+
+  if (G_UNLIKELY (parse->pending_buffers)) {
+    GList *l;
+
+    for (l = parse->pending_buffers; l; l = l->next) {
+      if (ret == GST_FLOW_OK)
+        ret = gst_pad_push (parse->srcpad, l->data);
+      else
+        gst_buffer_unref (l->data);
+    }
+    g_list_free (parse->pending_buffers);
+    parse->pending_buffers = NULL;
+
+    if (ret != GST_FLOW_OK) {
+      gst_buffer_unref (buffer);
+      return ret;
+    }
+  }
 
   return gst_pad_push (parse->srcpad, buffer);
 }
@@ -557,8 +677,6 @@ gst_mpegtsparse_plugin_init (GstPlugin * plugin)
 {
   GST_DEBUG_CATEGORY_INIT (mpegts_parse_debug, "tsparse", 0,
       "MPEG transport stream parser");
-
-  gst_mpegtsdesc_init_debug ();
 
   return gst_element_register (plugin, "tsparse",
       GST_RANK_NONE, GST_TYPE_MPEGTS_PARSE);

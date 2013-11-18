@@ -31,6 +31,7 @@ gst-plugins-bad-*.tar.*
 
 .deps
 .libs
+.dirstamp
 *.lo
 *.la
 *.o
@@ -53,6 +54,8 @@ gst*orc.h
 /tests/examples/jack/jack_client
 /tests/examples/opencv/gstmotioncells_dynamic_test
 /tests/examples/uvch264/test-uvch264
+/tests/examples/mpegts/tsparser
+/tests/examples/opencv/gsthanddetect_test
 
 Build
 *.user
@@ -61,3 +64,9 @@ Build
 *.sdf
 *.opensdf
 *.DS_Store
+
+/test-driver
+*.log
+*.trs
+
+/win32/common/config.h-new

@@ -65,7 +65,9 @@ gst_vdp_decoder_render (GstVdpDecoder * vdp_decoder, VdpPictureInfo * info,
   VdpStatus status;
 
   GstVdpVideoMemory *vmem;
+#ifndef GST_DISABLE_GST_DEBUG
   GstClockTime before, after;
+#endif
 
   GST_DEBUG_OBJECT (vdp_decoder, "n_bufs:%d, frame:%d", n_bufs,
       frame->system_frame_number);
@@ -83,11 +85,15 @@ gst_vdp_decoder_render (GstVdpDecoder * vdp_decoder, VdpPictureInfo * info,
     goto no_mem;
 
   GST_DEBUG_OBJECT (vdp_decoder, "Calling VdpDecoderRender()");
+#ifndef GST_DISABLE_GST_DEBUG
   before = gst_util_get_timestamp ();
+#endif
   status =
       vdp_decoder->device->vdp_decoder_render (vdp_decoder->decoder,
       vmem->surface, info, n_bufs, bufs);
+#ifndef GST_DISABLE_GST_DEBUG
   after = gst_util_get_timestamp ();
+#endif
   if (status != VDP_STATUS_OK)
     goto decode_error;
 
@@ -342,9 +348,13 @@ gst_vdp_decoder_class_init (GstVdpDecoderClass * klass)
   video_decoder_class->decide_allocation = gst_vdp_decoder_decide_allocation;
 
   GST_FIXME ("Actually create srcpad template from hw capabilities");
-  src_caps = gst_caps_from_string ("video/x-raw,format={ YV12 }");
-  src_template = gst_pad_template_new (GST_VIDEO_DECODER_SRC_NAME,
-      GST_PAD_SRC, GST_PAD_ALWAYS, src_caps);
+  src_caps =
+      gst_caps_from_string (GST_VIDEO_CAPS_MAKE_WITH_FEATURES
+      (GST_CAPS_FEATURE_MEMORY_VDPAU,
+          "{ YV12 }") ";" GST_VIDEO_CAPS_MAKE ("{ YV12 }"));
+  src_template =
+      gst_pad_template_new (GST_VIDEO_DECODER_SRC_NAME, GST_PAD_SRC,
+      GST_PAD_ALWAYS, src_caps);
 
   gst_element_class_add_pad_template (element_class, src_template);
 

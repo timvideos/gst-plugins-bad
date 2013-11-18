@@ -128,33 +128,6 @@ GST_IS_CAMERA_BIN_CLASS
 gst_camera_bin_get_type
 </SECTION>
 
-<SECTION>
-<FILE>element-celtdec</FILE>
-<TITLE>celtdec</TITLE>
-GstCeltDec
-<SUBSECTION Standard>
-GstCeltDecClass
-GST_CELT_DEC
-GST_CELT_DEC_CLASS
-GST_IS_CELT_DEC
-GST_IS_CELT_DEC_CLASS
-GST_TYPE_CELT_DEC
-gst_celt_dec_get_type
-</SECTION>
-
-<SECTION>
-<FILE>element-celtenc</FILE>
-<TITLE>celtenc</TITLE>
-GstCeltEnc
-<SUBSECTION Standard>
-GstCeltEncClass
-GST_CELT_ENC
-GST_CELT_ENC_CLASS
-GST_IS_CELT_ENC
-GST_IS_CELT_ENC_CLASS
-GST_TYPE_CELT_ENC
-gst_celt_enc_get_type
-</SECTION>
 
 <SECTION>
 <FILE>element-chromium</FILE>
@@ -1040,6 +1013,62 @@ GST_TYPE_NUV_DEMUX
 gst_nuv_demux_get_type
 </SECTION>
 
+<SECTION>
+<FILE>element-neonhttpsrc</FILE>
+<TITLE>neonhttpsrc</TITLE>
+GstNeonhttpSrc
+<SUBSECTION Standard>
+GstNeonhttpSrcClass
+GST_NEONHTTP_SRC
+GST_NEONHTTP_SRC_CLASS
+GST_IS_NEONHTTP_SRC
+GST_IS_NEONHTTP_SRC_CLASS
+GST_TYPE_NEONHTTP_SRC
+gst_neonhttp_src_get_type
+</SECTION>
+
+<SECTION>
+<FILE>element-ofa</FILE>
+<TITLE>ofa</TITLE>
+GstOFA
+<SUBSECTION Standard>
+GstOFAClass
+GST_OFA
+GST_OFA_CLASS
+GST_IS_OFA
+GST_IS_OFA_CLASS
+GST_TYPE_OFA
+gst_ofa_get_type
+</SECTION>
+
+<SECTION>
+<FILE>element-openalsink</FILE>
+<TITLE>openalsink</TITLE>
+GstOpenalSink
+<SUBSECTION Standard>
+GstOpenalSinkClass
+GST_OPENAL_SINK
+GST_OPENAL_SINK_CLASS
+GST_IS_OPENAL_SINK
+GST_IS_OPENAL_SINK_CLASS
+GST_TYPE_OPENAL_SINK
+gst_openal_sink_get_type
+</SECTION>
+
+<SECTION>
+<FILE>element-openalsrc</FILE>
+<TITLE>openalsrc</TITLE>
+GstOpenalSrc
+<SUBSECTION Standard>
+GstOpenalSrcClass
+GST_OPENAL_SRC
+GST_OPENAL_SRC_CLASS
+GST_IS_OPENAL_SRC
+GST_IS_OPENAL_SRC_CLASS
+GST_TYPE_OPENAL_SRC
+gst_openal_src_get_type
+</SECTION>
+
 <FILE>element-opencvtextoverlay</FILE>
 <TITLE>opencvtextoverlay</TITLE>
 GstOpencvTextOverlay
@@ -1097,6 +1126,20 @@ GST_IS_PYRAMIDSEGMENT
 GST_IS_PYRAMIDSEGMENT_CLASS
 gst_pyramidsegment_get_type
 gst_pyramidsegment_plugin_init
+</SECTION>
+
+<SECTION>
+<FILE>element-rfbsrc</FILE>
+<TITLE>rfbsrc</TITLE>
+GstRfbSrc
+<SUBSECTION Standard>
+GstRfbSrcClass
+GST_RFB_SRC
+GST_RFB_SRC_CLASS
+GST_IS_RFB_SRC
+GST_IS_RFB_SRC_CLASS
+GST_TYPE_RFB_SRC
+gst_rfb_src_get_type
 </SECTION>
 
 <SECTION>
@@ -1393,20 +1436,6 @@ GST_IS_TIMIDITY
 GST_IS_TIMIDITY_CLASS
 GST_TYPE_TIMIDITY
 gst_timidity_get_type
-</SECTION>
-
-<SECTION>
-<FILE>element-trm</FILE>
-<TITLE>trm</TITLE>
-GstTRM
-<SUBSECTION Standard>
-GstTRMClass
-GST_TRM
-GST_TRM_CLASS
-GST_IS_TRM
-GST_IS_TRM_CLASS
-GST_TYPE_TRM
-gst_trm_get_type
 </SECTION>
 
 <SECTION>

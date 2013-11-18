@@ -37,6 +37,11 @@
 #include "gsttemplatematch.h"
 #include "gsttextoverlay.h"
 #include "gsthanddetect.h"
+#include "gstskindetect.h"
+#include "gstretinex.h"
+#include "gstsegmentation.h"
+#include "gstgrabcut.h"
+#include "gstdisparity.h"
 
 static gboolean
 plugin_init (GstPlugin * plugin)
@@ -81,6 +86,21 @@ plugin_init (GstPlugin * plugin)
     return FALSE;
 
   if (!gst_handdetect_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_skin_detect_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_retinex_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_segmentation_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_grabcut_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_disparity_plugin_init (plugin))
     return FALSE;
 
   return TRUE;
